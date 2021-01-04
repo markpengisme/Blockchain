@@ -303,3 +303,380 @@ Chaincode生命週期的流程首先會將Chaincode部署到通道上，然後�
     ./network.sh down
     ```
 
+
+
+## Writing Your First Application(Lab3)
+
+**About Asset Transfer**
+
+-   Sample application: `asset-transfer-basic/application-javascript`
+-   Smart contract : `asset-transfer-basic/chaincode-(javascript, java, go, typescript)`
+
+1.  Set up the blockchain network(先安裝好 npm)
+
+    ```sh
+    ## 啟動網路
+    cd fabric-samples/test-network
+    ./network.sh down
+    ./network.sh up createChannel -c mychannel -ca
+    ./network.sh deployCC -ccn basic -ccp ../asset-transfer-basic/chaincode-javascript/ -ccl javascript
+    ```
+
+    ```sh
+    ## 範例應用
+    cd asset-transfer-basic/application-javascript
+    npm install
+    node app.js
+    ```
+
+    在第一步中啟動Fabric測試網絡時，建立了一個管理員用戶(admin)作為憑證頒發機構(CA)的註冊商。 我們的第一步是通過讓應用程序呼叫enrollAdmin來生成用於管理的公私鑰和X.509證書。 此過程使用憑證簽名請求(CSR): 首先在本地生成公私鑰，然後將公鑰發送到CA，CA傳回編碼的憑證以供應用程式使用，然後這些憑證會儲存在錢包中，使我們能夠充當CA的管理員。
+
+2.  The application enrolls the admin user
+
+    需要注意的是，註冊管理員和註冊應用程式使用者是發生在應用程式和憑證頒發機構之間的互動，而不是應用程式和Chaincode之間的互動。
+
+    ```js
+    async function main() {
+      try {
+        // build an in memory object with the network configuration (also known as a connection profile)
+        const ccp = buildCCP();
+    
+        // build an instance of the fabric ca services client based on
+        // the information in the network configuration
+        const caClient = buildCAClient(FabricCAServices, ccp);
+    
+        // setup the wallet to hold the credentials of the application user
+        const wallet = await buildWallet(Wallets, walletPath);
+    
+        // in a real application this would be done on an administrative flow, and only once
+        await enrollAdmin(caClient, wallet);
+    	// ...
+    ```
+
+    >```
+    >Wallet path: /Users/<your_username>/fabric-samples/asset-transfer-basic/application-javascript/wallet
+    >Successfully enrolled admin user and imported it into the wallet
+    >```
+
+    該程式將CA管理員的憑證儲存在錢包目錄中。你可以在`wallet/admin.id` 文件中找到管理員的憑證和私鑰。
+
+    (注！重啟需要刪掉wallet資料夾)
+
+3.  The application registers and enrolls an application user
+
+    ```js
+        // in a real application this would be done only when a new user was required to be added
+        // and would be part of an administrative flow
+        await registerUser(caClient, wallet, userId, 'org1.department1');
+        // ...
+    ```
+
+    >   ```
+    >   Successfully registered and enrolled user appUser and imported it into the wallet
+    >   ```
+
+    與管理員註冊類似，這個功能使用CSR來註冊appUser，並將其憑證與管理員的憑證一起儲存在錢包中。現在我們有了兩個獨立用戶的身份admin和appUser
+
+4.  The sample application prepares a connection to the channel and smart contract
+
+    ```js
+    // Create a new gateway instance for interacting with the fabric network.
+    // In a real application this would be done as the backend server session is setup for
+    // a user that has been verified.
+    const gateway = new Gateway();
+    
+    try {
+      // setup the gateway instance
+      // The user will now be able to create connections to the fabric network and be able to
+      // submit transactions and query. All transactions submitted by this gateway will be
+      // signed by this user using the credentials stored in the wallet.
+      await gateway.connect(ccp, {
+        wallet,
+        identity: userId,
+        discovery: {enabled: true, asLocalhost: true} // using asLocalhost as this gateway is using a fabric network deployed locally
+      });
+    
+      // Build a network instance based on the channel where the smart contract is deployed
+      const network = await gateway.getNetwork(channelName);
+    
+    
+      // Get the contract from the network.
+      const contract = network.getContract(chaincodeName);
+      // When a chaincode package includes multiple smart contracts,
+      // on the getContract() API you can specify both the name of the chaincode package
+      // and a specific smart contract to target. For example:
+      // const contract = await network.getContract('chaincodeName', 'smartContractName');
+    ```
+
+    應用程式正在通過閘道使用合約名稱和channel名稱來引用合約
+
+5.  The application initializes the ledger with some sample data
+
+    ```js
+    // Initialize a set of asset data on the channel using the chaincode 'InitLedger' function.
+    // This type of transaction would only be run once by an application the first time it was started after it
+    // deployed the first time. Any updates to the chaincode deployed later would likely not need to run
+    // an "init" type function.
+    console.log('\n--> Submit Transaction: InitLedger, function creates the initial set of assets on the ledger');
+    await contract.submitTransaction('InitLedger');
+    console.log('*** Result: committed');
+    ```
+
+    >```
+    >Submit Transaction: InitLedger, function creates the initial set of assets on the ledger
+    >```
+
+    `submitTransaction()`函數用於呼叫chaincode的`InitLedger`函數，用一些樣本資料填充帳本。在幕後，`submitTransaction()`函數將使用服務發現為chaincode找到一組所需的背書節點，在所需數量的peer上呼叫chaincode，從這些peer中收集chaincode背書結果，最後將交易提交給ordering service。
+
+    ```js
+    async InitLedger(ctx) {
+         const assets = [
+             {
+                 ID: 'asset1',
+                 Color: 'blue',
+                 Size: 5,
+                 Owner: 'Tomoko',
+                 AppraisedValue: 300,
+             },
+             {
+                 ID: 'asset2',
+                 Color: 'red',
+                 Size: 5,
+                 Owner: 'Brad',
+                 AppraisedValue: 400,
+             },
+             {
+                 ID: 'asset3',
+                 Color: 'green',
+                 Size: 10,
+                 Owner: 'Jin Soo',
+                 AppraisedValue: 500,
+             },
+             {
+                 ID: 'asset4',
+                 Color: 'yellow',
+                 Size: 10,
+                 Owner: 'Max',
+                 AppraisedValue: 600,
+             },
+             {
+                 ID: 'asset5',
+                 Color: 'black',
+                 Size: 15,
+                 Owner: 'Adriana',
+                 AppraisedValue: 700,
+             },
+             {
+                 ID: 'asset6',
+                 Color: 'white',
+                 Size: 15,
+                 Owner: 'Michel',
+                 AppraisedValue: 800,
+             },
+         ];
+    
+         for (const asset of assets) {
+             asset.docType = 'asset';
+             await ctx.stub.putState(asset.ID, Buffer.from(JSON.stringify(asset)));
+             console.info(`Asset ${asset.ID} initialized`);
+         }
+     }
+    ```
+
+    
+
+6.  The application invokes each of the chaincode functions
+
+    `evaluateTransaction()`函數用於當你想查詢單個peer，而不向ordering service 提交交易時。
+
+    ```js
+    // Let's try a query type operation (function).
+    // This will be sent to just one peer and the results will be shown.
+    console.log('\n--> Evaluate Transaction: GetAllAssets, function returns all the current assets on the ledger');
+    let result = await contract.evaluateTransaction('GetAllAssets');
+    console.log(`*** Result: ${prettyJSONString(result.toString())}`);
+    ```
+
+    ```js
+    // GetAllAssets returns all assets found in the world state.
+     async GetAllAssets(ctx) {
+         const allResults = [];
+         // range query with empty string for startKey and endKey does an open-ended query of all assets in the chaincode namespace.
+         const iterator = await ctx.stub.getStateByRange('', '');
+         let result = await iterator.next();
+         while (!result.done) {
+             const strValue = Buffer.from(result.value.value.toString()).toString('utf8');
+             let record;
+             try {
+                 record = JSON.parse(strValue);
+             } catch (err) {
+                 console.log(err);
+                 record = strValue;
+             }
+             allResults.push({ Key: result.value.key, Record: record });
+             result = await iterator.next();
+         }
+         return JSON.stringify(allResults);
+     }
+    ```
+
+    >```
+    >  Evaluate Transaction: GetAllAssets, function returns all the current assets on the ledger
+    >  Result: [...]
+    >```
+
+    CreateAsset，asset13
+
+    ```js
+    // Now let's try to submit a transaction.
+    // This will be sent to both peers and if both peers endorse the transaction, the endorsed proposal will be sent
+    // to the orderer to be committed by each of the peer's to the channel ledger.
+    console.log('\n--> Submit Transaction: CreateAsset, creates new asset with ID, color, owner, size, and appraisedValue arguments');
+    await contract.submitTransaction('CreateAsset', 'asset13', 'yellow', '5', 'Tom', '1300');
+    console.log('*** Result: committed');
+    ```
+
+    ```js
+    // CreateAsset issues a new asset to the world state with given details.
+    async CreateAsset(ctx, id, color, size, owner, appraisedValue) {
+      const asset = {
+          ID: id,
+          Color: color,
+          Size: size,
+          Owner: owner,
+          AppraisedValue: appraisedValue,
+      };
+      return ctx.stub.putState(id, Buffer.from(JSON.stringify(asset)));
+    }
+    ```
+
+    >```
+    >Submit Transaction: CreateAsset, creates new asset with ID, color, owner, size, and appraisedValue arguments
+    >```
+
+    ReadAssest，assest13
+
+    ```js
+    console.log('\n--> Evaluate Transaction: ReadAsset, function returns an asset with a given assetID');
+    result = await contract.evaluateTransaction('ReadAsset', 'asset13');
+    console.log(`*** Result: ${prettyJSONString(result.toString())}`);
+    ```
+
+    ```js
+    // ReadAsset returns the asset stored in the world state with given id.
+    async ReadAsset(ctx, id) {
+      const assetJSON = await ctx.stub.getState(id); // get the asset from chaincode state
+      if (!assetJSON || assetJSON.length === 0) {
+          throw new Error(`The asset ${id} does not exist`);
+      }
+      return assetJSON.toString();
+    }
+    ```
+
+    >```
+    >Evaluate Transaction: ReadAsset, function returns an asset with a given assetID
+    >Result: {
+    >  "ID": "asset13",
+    >  "Color": "yellow",
+    >  "Size": "5",
+    >  "Owner": "Tom",
+    >  "AppraisedValue": "1300"
+    >}
+    >```
+
+    `AssetExists` ->`UpdateAsse` ->`ReadAsset` ，assest1
+
+    ```js
+    console.log('\n--> Evaluate Transaction: AssetExists, function returns "true" if an asset with given assetID exist');
+    result = await contract.evaluateTransaction('AssetExists', 'asset1');
+    console.log(`*** Result: ${prettyJSONString(result.toString())}`);
+    
+    console.log('\n--> Submit Transaction: UpdateAsset asset1, change the appraisedValue to 350');
+    await contract.submitTransaction('UpdateAsset', 'asset1', 'blue', '5', 'Tomoko', '350');
+    console.log('*** Result: committed');
+    
+    console.log('\n--> Evaluate Transaction: ReadAsset, function returns "asset1" attributes');
+    result = await contract.evaluateTransaction('ReadAsset', 'asset1');
+    console.log(`*** Result: ${prettyJSONString(result.toString())}`);
+    ```
+
+    ```js
+    // AssetExists returns true when asset with given ID exists in world state.
+       async AssetExists(ctx, id) {
+           const assetJSON = await ctx.stub.getState(id);
+           return assetJSON && assetJSON.length > 0;
+       }
+    // UpdateAsset updates an existing asset in the world state with provided parameters.
+       async UpdateAsset(ctx, id, color, size, owner, appraisedValue) {
+           const exists = await this.AssetExists(ctx, id);
+           if (!exists) {
+               throw new Error(`The asset ${id} does not exist`);
+           }
+    
+           // overwriting original asset with new asset
+           const updatedAsset = {
+               ID: id,
+               Color: color,
+               Size: size,
+               Owner: owner,
+               AppraisedValue: appraisedValue,
+           };
+           return ctx.stub.putState(id, Buffer.from(JSON.stringify(updatedAsset)));
+       }
+     // ReadAsset returns the asset stored in the world state with given id.
+     async ReadAsset(ctx, id) {
+         const assetJSON = await ctx.stub.getState(id); // get the asset from chaincode state
+         if (!assetJSON || assetJSON.length === 0) {
+             throw new Error(`The asset ${id} does not exist`);
+         }
+         return assetJSON.toString();
+     }
+    ```
+
+    >```
+    >Evaluate Transaction: AssetExists, function returns "true" if an asset with given assetID exist
+    >Result: true
+    >
+    >Submit Transaction: UpdateAsset asset1, change the appraisedValue to 350
+    >
+    >Evaluate Transaction: ReadAsset, function returns "asset1" attributes
+    >Result: {
+    >  "ID": "asset1",
+    >  "Color": "blue",
+    >  "Size": "5",
+    >  "Owner": "Tomoko",
+    >  "AppraisedValue": "350"
+    >}
+    >```
+
+    `TransferAsset`->`ReadAsset`
+
+    ```js
+    console.log('\n--> Submit Transaction: TransferAsset asset1, transfer to new owner of Tom');
+    await contract.submitTransaction('TransferAsset', 'asset1', 'Tom');
+    console.log('*** Result: committed');
+    
+    console.log('\n--> Evaluate Transaction: ReadAsset, function returns "asset1" attributes');
+    result = await contract.evaluateTransaction('ReadAsset', 'asset1');
+    console.log(`*** Result: ${prettyJSONString(result.toString())}`);
+    ```
+
+    >```
+    >Submit Transaction: TransferAsset asset1, transfer to new owner of Tom
+    >Evaluate Transaction: ReadAsset, function returns "asset1" attributes
+    >Result: {
+    >  "ID": "asset1",
+    >  "Color": "blue",
+    >  "Size": "5",
+    >  "Owner": "Tom",
+    >  "AppraisedValue": "350"
+    >}
+    >```
+
+7.  clean up
+
+    ```sh
+    ./network.sh down
+    ```
+
+    
