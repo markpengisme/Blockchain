@@ -680,3 +680,180 @@ Chaincode生命週期的流程首先會將Chaincode部署到通道上，然後�
     ```
 
     
+
+## Commercial paper tutorial(Lab4)
+
+情境：MagnetoCorp 和 DigiBank 這兩個組織使用PaperNet(Hyperledger Fabric區塊鏈網路)進行商業票據交易。建立測試網路後，MagnetoCorp 的員工 Isabella，將代表該公司發行商業票據， 然後DigiBank的員工 Balaji，將購買此商業票據，持有一段時間，然後向 MagnetoCorp 贖回以獲取少許利潤。
+
+1.  Prerequisites
+
+    -   node.js
+    -   vscode(用 code 來看程式碼時需要) 
+
+2.  Create the network
+
+    ```sh
+    cd fabric-samples/commercial-paper
+    ./network-starter.sh
+    docker ps
+    docker network inspect net_test
+    ```
+
+    8個 container，
+
+    -   The Org1 peer, `peer0.org1.example.com`, **DigiBank**
+    -   The Org2 peer, `peer0.org2.example.com`, **MagnetoCorp**
+    -   The CouchDB database for the Org1 peer, `couchdb0`
+    -   The CouchDB database for the Org2 peer, `couchdb1`
+    -   The Ordering node, `orderer.example.com`
+    -   The Org1 CA, `ca_org1`
+    -   The Org2 CA, `ca_org2`
+    -   The Ordering Org CA
+
+3.  Monitor the network as MagnetoCorp
+
+    ```sh
+    ## open new window
+    cd organization/magnetocorp
+    ./configuration/cli/monitordocker.sh net_test
+    ## if default port in use -> ./configuration/cli/monitordocker.sh net_test <port_number>
+    ```
+
+4.  Examine the commercial paper smart contract
+
+    ```sh
+    ## open new window
+    cd organization/magnetocorp
+    code contract
+    ```
+
+    `lib/papercontract.js`: 合約內容
+
+    -   `const { Contract, Context } = require('fabric-contract-api');`:  Contract & Context
+    -   `class CommercialPaperContract extends Contract {`: 裡面定義交易關鍵的函數，e.g. issue, buy, transfer
+
+5.  Deploy the smart contract to the channel
+
+    我們需要以MagnetoCorp和DigiBank的管理員身份安裝和同意chaincode。
+
+    ```sh
+    ## MagnetoCorp(open new window)
+    cd organization/magnetocorp
+    ## set the environment variables
+    source magnetocorp.sh 
+    ## package
+    peer lifecycle chaincode package cp.tar.gz --lang node --path ./contract --label cp_0
+    ## install
+    peer lifecycle chaincode install cp.tar.gz
+    ## query
+    peer lifecycle chaincode queryinstalled
+    ## package id 每個人都不一樣
+    export PACKAGE_ID=cp_0:ddca913c004eb34f36dfb0b4c0bcc6d4afc1fa823520bb5966a3bfcf1808f40a
+    ## approve
+    peer lifecycle chaincode approveformyorg --orderer localhost:7050 --ordererTLSHostnameOverride orderer.example.com --channelID mychannel --name papercontract -v 0 --package-id $PACKAGE_ID --sequence 1 --tls --cafile $ORDERER_CA
+    ```
+
+    ```sh
+    ## DigiBank(open new window)
+    cd organization/digibank
+    ## set the environment variables
+    source digibank.sh 
+    ## package
+    peer lifecycle chaincode package cp.tar.gz --lang node --path ./contract --label cp_0
+    ## install
+    peer lifecycle chaincode install cp.tar.gz
+    ## query
+    peer lifecycle chaincode queryinstalled
+    ## package id 每個人都不一樣
+    export PACKAGE_ID=cp_0:ddca913c004eb34f36dfb0b4c0bcc6d4afc1fa823520bb5966a3bfcf1808f40a
+    ## approve
+    peer lifecycle chaincode approveformyorg --orderer localhost:7050 --ordererTLSHostnameOverride orderer.example.com --channelID mychannel --name papercontract -v 0 --package-id $PACKAGE_ID --sequence 1 --tls --cafile $ORDERER_CA
+    ```
+
+    ```sh
+    ## Commit(當兩方都同意了，任意一方都可以commit，這裡繼續使用DigiBank)
+    peer lifecycle chaincode commit -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com --peerAddresses localhost:7051 --tlsRootCertFiles ${PEER0_ORG1_CA} --peerAddresses localhost:9051 --tlsRootCertFiles ${PEER0_ORG2_CA} --channelID mychannel --name papercontract -v 0 --sequence 1 --tls --cafile $ORDERER_CA --waitForEvent
+    ## commit後啟動兩個chaincode container
+    docker ps
+    ```
+
+6.  Magnetocorp application - issue
+
+    ![issue 流程](https://hyperledger-fabric.readthedocs.io/en/latest/_images/commercial_paper.diagram.8.png)
+
+    1.  wallet -> Isabella(ap): retrieve
+    2.  isabella(ap) -> gateway: submit
+    3.  gateway <-> peer: propose/endorse
+    4.  gateway -> orderer: order
+    5.  order -> peer: distribute
+    6.  peer -> gateway: notify
+    7.  gateway -> Isabella(ap): response
+
+    ```sh
+    ## Magnetocorp(issabela)
+    cd organization/magnetocorp
+    code application
+    npm install
+    ```
+
+    `issue.js`: 
+
+    -   `const { Wallets, Gateway } = require('fabric-network');`: Wallets & Gateway, Key SDK classes
+    -   `const wallet = await Wallets.newFileSystemWallet('../identity/user/isabella/wallet');`: 使用isabella錢包
+    -   `await gateway.connect(connectionProfile, connectionOptions);`: 連接到閘道
+    -   `const network = await gateway.getNetwork('mychannel');`: 連接到myChannel網路
+    -   `const contract = await network.getContract('papercontract');`: 存取 papercontract 合約
+    -   `const issueResponse = await contract.submitTransaction('issue', 'MagnetoCorp', '00001', ...);`: 發issue交易
+    -   `let paper = CommercialPaper.fromBuffer(issueResponse);`: response
+
+    在 isabella 的 wallet 中產生 X.509 certificate，然後執行`issue.js`，結果：`MagnetoCorp commercial paper : 00001 successfully issued for value 5000000`
+
+    ```sh
+    ## 運行在PaperNet上的MagnetoCorp憑證頒發機構ca_org2有一個應用程式使用者，該使用者是在部署網路時註冊的。Isabella可以使用身份名稱和秘密(enrollmentSecret)為issue.js應用產生X.509加密材料。使用CA產生客戶端加密材料的過程被稱為註冊。在一個實際場景中，網路營運商向應用程式開發者提供CA註冊要的客戶端身份名稱和秘密，然後開發人員將使用該信物來註冊他們的應用程式並與網路互動。
+    
+    ## enrollUser.js 使用fabric-ca-client來生成公私鑰對，然後向CA發出憑證簽署請求。如果Isabella提交的使用者和秘密與CA註冊的信物相匹配，CA就會簽發一份憑證，確定Isabella屬於MagnetoCorp。當簽名請求完成後，enrollUser.js會將私鑰和簽名憑證存儲存在Isabella的錢包裡。
+    node enrollUser.js
+    cat ../identity/user/isabella/wallet/*
+    node issue.js
+    ## 應用程式呼叫 papercontract.js 中的 CommercialPaper 智能合約中定義的 issue交易。智能合約通過 Fabric API 與帳本進行互動，最主要的是 putState() 和 getState()，將新的商業票據表示為世界狀態中的一個向量狀態。
+    ```
+
+7.  Digibank application - buy
+
+    ```sh
+    ## Digibank(Balaji)
+    cd organization/digibank/application/
+    code buy.js
+    npm install
+    ```
+
+    `buy.js`:
+
+    -   整體來說和 `issue.js`很像
+    -   主要差別在`const buyResponse = await contract.submitTransaction('buy', 'MagnetoCorp', '00001', ...);`
+
+    在 Balaji 的 wallet 中產生 X.509 certificate，然後執行`buy.js`，
+
+    ```sh
+    node enrollUser.js
+    cat ../identity/user/balaji/wallet/*
+    node buy.js
+    ## 看到程式輸出，MagnetoCorp 商業票據 00001 被 Balaji 代表 DigiBank 成功購買。buy.js 呼叫了CommercialPaper智能合約中定義的buy交易，該交易使用 putState() 和 getState() Fabric API 更新了世界狀態中的商業票據00001。
+    ```
+
+8.  Digibank application - redeem
+
+    ```sh
+    node redeem.js
+    ## 查詢歷史
+    node queryapp.js
+    ```
+
+9.  Clean up
+
+    ```sh
+    cd fabric-samples/commercial-paper
+    ./network-clean.sh
+    ```
+
+    
