@@ -1,5 +1,7 @@
 # Hyperledger Fabric
 
+[tutorial](https://hyperledger-fabric.readthedocs.io/en/latest/tutorials.html)
+
 ## Prerequisites
 
 1. install git
@@ -38,7 +40,7 @@
 5. Interacting with the network
 
     1. Environment variables for Org
-    
+
         ```sh
         export PATH=${PWD}/../bin:$PATH
         export FABRIC_CFG_PATH=$PWD/../config/
@@ -53,10 +55,12 @@
       
     2. Init Ledger
       
-        ```sh
-       peer Chaincode invoke -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com --tls --cafile ${PWD}/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem -C mychannel -n basic --peerAddresses localhost:7051 --tlsRootCertFiles ${PWD}/organizations/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt --peerAddresses localhost:9051 --tlsRootCertFiles ${PWD}/organizations/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt -c '{"function":"InitLedger","Args":[]}'
-       ```
-
+        
+       
+       ```sh
+    peer Chaincode invoke -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com --tls --cafile ${PWD}/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem -C mychannel -n basic --peerAddresses localhost:7051 --tlsRootCertFiles ${PWD}/organizations/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt --peerAddresses localhost:9051 --tlsRootCertFiles ${PWD}/organizations/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt -c '{"function":"InitLedger","Args":[]}'
+      ```
+      
     3. Get All Assets
       
         ```sh
@@ -83,7 +87,7 @@
        ```sh
        peer Chaincode query -C mychannel -n basic -c '{"Args":["ReadAsset","asset6"]}'
        ```
-    
+
 6. Bring down the network
 
 	> The command will stop and remove the node and Chaincode containers, delete the organization crypto material, and remove the Chaincode images from your Docker Registry. The command also removes the channel artifacts and docker volumes from previous runs, allowing you to run `./network.sh up` again if you encountered any problems.
@@ -305,7 +309,7 @@ Chaincode生命週期的流程首先會將Chaincode部署到通道上，然後�
 
 
 
-## Writing Your First Application(Lab3)
+## Writing Your First Application(Lab3) 
 
 **About Asset Transfer**
 
@@ -681,7 +685,7 @@ Chaincode生命週期的流程首先會將Chaincode部署到通道上，然後�
 
     
 
-## Commercial paper tutorial(Lab4)
+## Commercial paper tutorial(Lab 4)
 
 情境：MagnetoCorp 和 DigiBank 這兩個組織使用PaperNet(Hyperledger Fabric區塊鏈網路)進行商業票據交易。建立測試網路後，MagnetoCorp 的員工 Isabella，將代表該公司發行商業票據， 然後DigiBank的員工 Balaji，將購買此商業票據，持有一段時間，然後向 MagnetoCorp 贖回以獲取少許利潤。
 
@@ -856,4 +860,335 @@ Chaincode生命週期的流程首先會將Chaincode部署到通道上，然後�
     ./network-clean.sh
     ```
 
+## Using Private Data in Fabric(Lab 5)
+
+本實驗演示使用私有資料集合(PDC)為組織的授權peer提供區塊鏈網路上私有資料的儲存和檢索，使用包含管理該集合的策略的"集合定義文件"指定該集合。
+
+1. Asset transfer private data sample use case
+
+    這個案例演示了使用三個私有資料集合 assetCollection、Org1MSPPrivateCollection 和 Org2MSPPrivateCollection 在 Org1 和 Org2 之間轉移資產，使用的是以下案例
+
+    -   Org1 的一個成員創建了一個新的資產，以下簡稱為擁有者。資產的公開細節，包括擁有者的身份，被存儲在名為 assetCollection 的私有資料集合中。資產的建立也包含了由擁有者提供的估價值。估價值由每個參與者用來同意資產的轉讓，並且只儲存在擁有者組織的集合中。在案例中，擁有者同意的初始估價值會儲存在 Org1MSPPrivateCollection 中。
+
+    -   要購買資產，買方需要同意資產擁有者估價值。在這一步驟中，買方(Org2的成員)使用智慧合約函數 `AgreeToTransfer`建立一個交易協議，並同意一個估價值。這個值會儲存在 Org2MSPPateCollection 集合中。然後資產擁有者可以使用智能合約函數`TransferAsset`將資產轉讓給買方。`TransferAsset`函數在轉讓資產之前，使用channel帳本上的hash值來確認資產擁有者和買方已經同意相同的估價價值。
+
     
+
+2. Build a collection definition JSON file
+
+    在一組組織使用私有資料進行交易之前，channel 上的所有組織都需要建立一個集合定義文件，定義與每個 chaincode 相關的私有資料集合。儲存在私有資料集合中的資料只分配給某些組織的peer，而不是channel的所有成員。集合定義文件描述了組織可以從 chaincode 中讀取和寫入的所有私有資料集合。例如：
+
+    (Policy:  Defines the organization peers allowed to persist the collection data.)
+
+    ```json
+    // collections_config.json
+    
+    [
+       {
+       "name": "assetCollection",
+       "policy": "OR('Org1MSP.member', 'Org2MSP.member')",
+       "requiredPeerCount": 1,
+       "maxPeerCount": 1,
+       "blockToLive":1000000,
+       "memberOnlyRead": true,
+       "memberOnlyWrite": true
+       },
+       {
+       "name": "Org1MSPPrivateCollection",
+       "policy": "OR('Org1MSP.member')",
+       "requiredPeerCount": 0,
+       "maxPeerCount": 1,
+       "blockToLive":3,
+       "memberOnlyRead": true,
+       "memberOnlyWrite": false,
+       "endorsementPolicy": {
+           "signaturePolicy": "OR('Org1MSP.member')"
+       }
+       },
+       {
+       "name": "Org2MSPPrivateCollection",
+       "policy": "OR('Org2MSP.member')",
+       "requiredPeerCount": 0,
+       "maxPeerCount": 1,
+       "blockToLive":3,
+       "memberOnlyRead": true,
+       "memberOnlyWrite": false,
+       "endorsementPolicy": {
+           "signaturePolicy": "OR('Org2MSP.member')"
+       }
+       }
+    ]
+    ```
+
+    所有使用chaincode的組織都需要部署同一個集合定義文件，即使該組織不屬於任何集合。除了在集合文件中明確定義的集合之外，每個組織還可以訪問其peer上的隱式集合，該集合只能由其組織讀取。
+
+    
+
+3. Read and Write private data using chaincode APIs
+
+    資料格式定義在chaincode中
+
+    ```go
+    // Peers in Org1 and Org2 will have this private data in a side database
+    type Asset struct {
+           Type  string `json:"objectType"` //Type is used to distinguish the various types of objects in state database
+           ID    string `json:"assetID"`
+           Color string `json:"color"`
+           Size  int    `json:"size"`
+           Owner string `json:"owner"`
+    }
+    
+    // AssetPrivateDetails describes details that are private to owners
+    
+    // Only peers in Org1 will have this private data in a side database
+    type AssetPrivateDetails struct {
+           ID             string `json:"assetID"`
+           AppraisedValue int    `json:"appraisedValue"`
+    }
+    
+    // Only peers in Org2 will have this private data in a side database
+    type AssetPrivateDetails struct {
+           ID             string `json:"assetID"`
+           AppraisedValue int    `json:"appraisedValue"`
+    }
+    
+    ```
+
+    -   Reading collection data
+        -   智慧合約使用 chaincode API `GetPrivateData()`來查詢資料庫中的私有資料
+        -   **ReadAsset** for querying the values of the `assetID, color, size and owner` attributes.
+        -   **ReadAssetPrivateDetails** for querying the values of the `appraisedValue` attribute.
+    -   Writing private data
+        -   智慧合約使用 chaincode API `PutPrivateData()`來儲存私有資料到資料庫中
+
+4.  Start the network
+
+    ```sh
+    cd fabric-samples/test-network
+    ./network.sh down
+    ./network.sh up createChannel -ca -s couchdb
+    ```
+
+5.  Deploy the private data smart contract to the channel
+
+    ```sh
+    ## package -> install -> approveformyorg -> commit -> querrycommit
+    ./network.sh deployCC -ccn private -ccp ../asset-transfer-private-data/chaincode-go/ -ccl go -ccep "OR('Org1MSP.peer','Org2MSP.peer')" -cccg ../asset-transfer-private-data/chaincode-go/collections_config.json
+    ```
+
+6.  Register identities
+
+    使用Org1和Org2的CA註冊兩個新身份，然後使用CA生成每個身份的憑證和私鑰。
+
+    ```sh
+    export PATH=${PWD}/../bin:${PWD}:$PATH
+    export FABRIC_CFG_PATH=$PWD/../config/
+    
+    ## Org1
+    export FABRIC_CA_CLIENT_HOME=${PWD}/organizations/peerOrganizations/org1.example.com/
+    
+    ## register a new owner client identity
+    fabric-ca-client register --caname ca-org1 --id.name owner --id.secret ownerpw --id.type client --tls.certfiles ${PWD}/organizations/fabric-ca/org1/tls-cert.pem
+    
+    ## enroll(generate the identity certificates and MSP folder)
+    fabric-ca-client enroll -u https://owner:ownerpw@localhost:7054 --caname ca-org1 -M ${PWD}/organizations/peerOrganizations/org1.example.com/users/owner@org1.example.com/msp --tls.certfiles ${PWD}/organizations/fabric-ca/org1/tls-cert.pem
+    
+    ##  copy the Node OU configuration file
+    cp ${PWD}/organizations/peerOrganizations/org1.example.com/msp/config.yaml ${PWD}/organizations/peerOrganizations/org1.example.com/users/owner@org1.example.com/msp/config.yaml
+    
+    ## Org2
+    export FABRIC_CA_CLIENT_HOME=${PWD}/organizations/peerOrganizations/org2.example.com/
+    ## register a new owner client identity
+    fabric-ca-client register --caname ca-org2 --id.name buyer --id.secret buyerpw --id.type client --tls.certfiles ${PWD}/organizations/fabric-ca/org2/tls-cert.pem
+    
+    ## enroll(generate the identity certificates and MSP folder)
+    fabric-ca-client enroll -u https://buyer:buyerpw@localhost:8054 --caname ca-org2 -M ${PWD}/organizations/peerOrganizations/org2.example.com/users/buyer@org2.example.com/msp --tls.certfiles ${PWD}/organizations/fabric-ca/org2/tls-cert.pem
+    
+    ##  copy the Node OU configuration file
+    cp ${PWD}/organizations/peerOrganizations/org2.example.com/msp/config.yaml ${PWD}/organizations/peerOrganizations/org2.example.com/users/buyer@org2.example.com/msp/config.yaml
+    ```
+
+7.  Create an asset in private data
+
+    -   私有資料是通過`--transient`傳遞的，而且需要使用二進制，因此下面把它編碼程 base64
+
+    ```sh
+    export PATH=${PWD}/../bin:$PATH
+    export FABRIC_CFG_PATH=$PWD/../config/
+    
+    ## Org1
+    export CORE_PEER_TLS_ENABLED=true
+    export CORE_PEER_LOCALMSPID="Org1MSP"
+    export CORE_PEER_TLS_ROOTCERT_FILE=${PWD}/organizations/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt
+    export CORE_PEER_MSPCONFIGPATH=${PWD}/organizations/peerOrganizations/org1.example.com/users/owner@org1.example.com/msp
+    export CORE_PEER_ADDRESS=localhost:7051
+    
+    ## CreateAssest
+    export ASSET_PROPERTIES=$(echo -n "{\"objectType\":\"asset\",\"assetID\":\"asset1\",\"color\":\"green\",\"size\":20,\"appraisedValue\":100}" | base64 | tr -d \\n)
+    peer chaincode invoke -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com --tls --cafile ${PWD}/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem -C mychannel -n private -c '{"function":"CreateAsset","Args":[]}' --transient "{\"asset_properties\":\"$ASSET_PROPERTIES\"}"
+    ```
+
+8.  Query the private data as an authorized peer
+
+    ReadAsset & ReadAssetPrivateDetails chaincode
+
+    ```go
+    // ReadAsset reads the information from collection
+    func (s *SmartContract) ReadAsset(ctx contractapi.TransactionContextInterface, assetID string) (*Asset, error) {
+    
+         log.Printf("ReadAsset: collection %v, ID %v", assetCollection, assetID)
+         assetJSON, err := ctx.GetStub().GetPrivateData(assetCollection, assetID) //get the asset from chaincode state
+         if err != nil {
+             return nil, fmt.Errorf("failed to read asset: %v", err)
+         }
+    
+         //No Asset found, return empty response
+         if assetJSON == nil {
+             log.Printf("%v does not exist in collection %v", assetID, assetCollection)
+             return nil, nil
+         }
+    
+         var asset *Asset
+         err = json.Unmarshal(assetJSON, &asset)
+         if err != nil {
+             return nil, fmt.Errorf("failed to unmarshal JSON: %v", err)
+         }
+    
+         return asset, nil
+    
+     }
+    
+    // ReadAssetPrivateDetails reads the asset private details in organization specific collection
+    func (s *SmartContract) ReadAssetPrivateDetails(ctx contractapi.TransactionContextInterface, collection string, assetID string) (*AssetPrivateDetails, error) {
+         log.Printf("ReadAssetPrivateDetails: collection %v, ID %v", collection, assetID)
+         assetDetailsJSON, err := ctx.GetStub().GetPrivateData(collection, assetID) // Get the asset from chaincode state
+         if err != nil {
+             return nil, fmt.Errorf("failed to read asset details: %v", err)
+         }
+         if assetDetailsJSON == nil {
+             log.Printf("AssetPrivateDetails for %v does not exist in collection %v", assetID, collection)
+             return nil, nil
+         }
+    
+         var assetDetails *AssetPrivateDetails
+         err = json.Unmarshal(assetDetailsJSON, &assetDetails)
+         if err != nil {
+             return nil, fmt.Errorf("failed to unmarshal JSON: %v", err)
+         }
+    
+         return assetDetails, nil
+     }
+    
+    ```
+
+    ```sh
+    ## query
+    peer chaincode query -C mychannel -n private -c '{"function":"ReadAsset","Args":["asset1"]}'
+    peer chaincode query -C mychannel -n private -c '{"function":"ReadAssetPrivateDetails","Args":["Org1MSPPrivateCollection","asset1"]}'
+    ```
+
+9.  Query the private data as an unauthorized peer
+
+    ```sh
+    ## Org 2
+    export CORE_PEER_LOCALMSPID="Org2MSP"
+    export CORE_PEER_TLS_ROOTCERT_FILE=${PWD}/organizations/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt
+    export CORE_PEER_MSPCONFIGPATH=${PWD}/organizations/peerOrganizations/org2.example.com/users/buyer@org2.example.com/msp
+    export CORE_PEER_ADDRESS=localhost:9051
+    
+    ## qeury -> ok
+    peer chaincode query -C mychannel -n private -c '{"function":"ReadAsset","Args":["asset1"]}'
+    
+    ## qeury Org2 -> empty
+    peer chaincode query -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com --tls --cafile ${PWD}/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem -C mychannel -n private -c '{"function":"ReadAssetPrivateDetails","Args":["Org2MSPPrivateCollection","asset1"]}'
+    
+    ## qeury Org1 -> fail
+    peer chaincode query -C mychannel -n private -c '{"function":"ReadAssetPrivateDetails","Args":["Org1MSPPrivateCollection","asset1"]}'
+    ```
+
+10.  Transfer the Asset
+
+     ```sh
+     ## Org2
+     ## AgreeToTransfer
+     export ASSET_VALUE=$(echo -n "{\"assetID\":\"asset1\",\"appraisedValue\":100}" | base64 | tr -d \\n)
+     peer chaincode invoke -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com --tls --cafile ${PWD}/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem -C mychannel -n private -c '{"function":"AgreeToTransfer","Args":[]}' --transient "{\"asset_value\":\"$ASSET_VALUE\"}"
+     
+     ## ReadAssetPrivateDetails
+     peer chaincode query -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com --tls --cafile ${PWD}/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem -C mychannel -n private -c '{"function":"ReadAssetPrivateDetails","Args":["Org2MSPPrivateCollection","asset1"]}'
+     ```
+
+     在smartcontract 利用 hash 確認 owner appraise = buyer appraise ，以此方式做到 blind auction
+
+     ```sh
+     ## Org1
+     export CORE_PEER_LOCALMSPID="Org1MSP"
+     export CORE_PEER_MSPCONFIGPATH=${PWD}/organizations/peerOrganizations/org1.example.com/users/owner@org1.example.com/msp
+     export CORE_PEER_TLS_ROOTCERT_FILE=${PWD}/organizations/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt
+     export CORE_PEER_ADDRESS=localhost:7051
+     
+     ## ReadTransferAgreement
+     peer chaincode query -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com --tls --cafile ${PWD}/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem -C mychannel -n private -c '{"function":"ReadTransferAgreement","Args":["asset1"]}'
+     
+     ## Transfer
+     export ASSET_OWNER=$(echo -n "{\"assetID\":\"asset1\",\"buyerMSP\":\"Org2MSP\"}" | base64 | tr -d \\n)
+     peer chaincode invoke -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com --tls --cafile ${PWD}/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem -C mychannel -n private -c '{"function":"TransferAsset","Args":[]}' --transient "{\"asset_owner\":\"$ASSET_OWNER\"}" --peerAddresses localhost:7051 --tlsRootCertFiles ${PWD}/organizations/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt
+     
+     ## query
+     peer chaincode query -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com --tls --cafile ${PWD}/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem -C mychannel -n private -c '{"function":"ReadAsset","Args":["asset1"]}'
+     
+     ## query -> empty
+     peer chaincode query -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com --tls --cafile ${PWD}/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem -C mychannel -n private -c '{"function":"ReadAssetPrivateDetails","Args":["Org1MSPPrivateCollection","asset1"]}'
+     
+     ```
+
+11.  Purge Private Data
+
+     ```sh
+     ## Org2
+     export CORE_PEER_LOCALMSPID="Org2MSP"
+     export CORE_PEER_TLS_ROOTCERT_FILE=${PWD}/organizations/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt
+     export CORE_PEER_MSPCONFIGPATH=${PWD}/organizations/peerOrganizations/org2.example.com/users/buyer@org2.example.com/msp
+     export CORE_PEER_ADDRESS=localhost:9051
+     
+     ## 還查的到估價值
+     peer chaincode query -C mychannel -n private -c '{"function":"ReadAssetPrivateDetails","Args":["Org2MSPPrivateCollection","asset1"]}'
+     
+     ## 查詢logs看目前 block 高度
+     docker logs peer0.org1.example.com 2>&1 | grep -i -a -E 'private|pvt|privdata'
+     
+     ## 發三次交易之前的記錄就會清除(因為設定blockToLive: 3)
+     export ASSET_PROPERTIES=$(echo -n "{\"objectType\":\"asset\",\"assetID\":\"asset2\",\"color\":\"blue\",\"size\":30,\"appraisedValue\":100}" | base64 | tr -d \\n)
+     peer chaincode invoke -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com --tls --cafile ${PWD}/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem -C mychannel -n private -c '{"function":"CreateAsset","Args":[]}' --transient "{\"asset_properties\":\"$ASSET_PROPERTIES\"}"
+     export ASSET_PROPERTIES=$(echo -n "{\"objectType\":\"asset\",\"assetID\":\"asset3\",\"color\":\"red\",\"size\":25,\"appraisedValue\":100}" | base64 | tr -d \\n)
+     peer chaincode invoke -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com --tls --cafile ${PWD}/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem -C mychannel -n private -c '{"function":"CreateAsset","Args":[]}' --transient "{\"asset_properties\":\"$ASSET_PROPERTIES\"}"
+     export ASSET_PROPERTIES=$(echo -n "{\"objectType\":\"asset\",\"assetID\":\"asset4\",\"color\":\"orange\",\"size\":15,\"appraisedValue\":100}" | base64 | tr -d \\n)
+     peer chaincode invoke -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com --tls --cafile ${PWD}/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem -C mychannel -n private -c '{"function":"CreateAsset","Args":[]}' --transient "{\"asset_properties\":\"$ASSET_PROPERTIES\"}"
+     
+     ## 查詢logs看目前 block 高度
+     docker logs peer0.org1.example.com 2>&1 | grep -i -a -E 'private|pvt|privdata'
+     
+     ## 查不到估價值了
+     peer chaincode query -C mychannel -n private -c '{"function":"ReadAssetPrivateDetails","Args":["Org2MSPPrivateCollection","asset1"]}'
+     
+     ```
+
+12.  Using indexes with private data
+
+     索引也可以應用於私有資料集合，通過在chaincode旁邊打包`META-INF/statedb/couchdb/collections/<collection_name>/indexes`目錄中的索引。[example](https://github.com/hyperledger/fabric-samples/blob/master//asset-transfer-private-data/chaincode-go/META-INF/statedb/couchdb/collections/assetCollection/indexes/indexOwner.json)
+
+     為了將 chaincode 部署到正式環境中，建議在寫 chaincode 的同時定義任何索引，以便在 chaincode 安裝到 peer 並在channel實例化後，將chaincode和索引作為一個單元自動部署。當指定`--collections-config`指向集合JSON文件的位置時，關聯的索引將在channel上的chaincode實例化時自動部署。
+
+13.  Clean up
+
+     ```sh
+     ./network.sh down
+     ```
+
+14.  Additional resources
+
+     -   註1：測試後 query 不需要加 -o 那些有關 orderer 的參數也可以正確執行，而需要提交到帳本的動作，因為觸發到交易則需要
+     -   註2：peerAddresses 參數在測試後看起來只有在 commit 的時候有用
+
+     [video](https://youtu.be/qyjDi93URJE)
+
