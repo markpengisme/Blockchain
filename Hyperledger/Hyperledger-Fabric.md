@@ -17,26 +17,27 @@
 
 2.  Bring up the network: `./network.sh down`->`./network.sh up`
 
-   - 2 peer nodes: `peer0.org1.example.com`,`peer0.org2.example.com`
-     - Peer node 要是某個 org 的成員
-     - Peer node 儲存區塊鏈分類帳，並在交易提交到分類帳之前驗證它們(運行智慧合約)。
-   - 1 ordering node:`orderer.example.com`
-     - Oredeing node從客戶端接收到認可的交易後，它們會就交易順序達成共識，然後將它們添加到區塊中。然後，這些區塊分發給peer node然後添加到區塊鏈分類帳中。
-   - 0 channel
+    - 2 peer nodes: `peer0.org1.example.com`,`peer0.org2.example.com`
+        - Peer node 要是某個 org 的成員
+        - Peer node 儲存區塊鏈分類帳，並在交易提交到分類帳之前驗證它們(運行智慧合約)。
+    - 1 ordering node:`orderer.example.com`
+        - Oredeing node從客戶端接收到認可的交易後，它們會就交易順序達成共識，然後將它們添加到區塊中。然後，這些區塊分發給peer node然後添加到區塊鏈分類帳中。
+    - 0 channel
 
-3. Create channel: `./network.sh createChannel`，取名:
+3. Create channel: `./network.sh createChannel`，-c 取名:
 
-4. Starting a Chaincode on the channel: 
+4. Starting a chaincode on the channel: 
 
-   1. ```sh
-      ./network.sh deployCC -ccn basic -ccp ../asset-transfer-basic/Chaincode-go -ccl go
-      ```
+    1. ```sh
+        ./network.sh deployCC -ccn basic -ccp ../asset-transfer-basic/chaincode-go -ccl go
+        ```
 
-   - 為了確保交易的有效性，使用智慧合約創建的交易通常需要由多個組織簽署(多重簽名)才能提交到渠道分類賬。為了簽署交易，每個組織需要在其對等體上調用並執行智慧合約，然後簽署交易的輸出。
-- 指定通道上需要執行智慧合約的集合組織的策略被稱為背書策略，作為Chaincode definition一部分由Chaincode設定
-   - 一個Chaincode被安裝在組織的對等體上，然後部署到一個通道上，然後它可以用來認可交易並與區塊鏈分類賬進行互動。
-   - 在將Chaincode部署到通道之前，通道的成員需要對建立Chaincode治理的Chaincode definition達成一致。當所需數量的組織同意時，Chaincode definition可以提交給channel，Chaincode 就可以使用了。
-   
+    - 為了確保交易的有效性，使用智慧合約創建的交易通常需要由多個組織簽署(多重簽名)才能提交到渠道分類賬。為了簽署交易，每個組織需要在其對等體上調用並執行智慧合約，然後簽署交易的輸出。
+
+- 指定通道上需要執行智慧合約的集合組織的策略被稱為背書策略，作為chaincode definition一部分由chaincode設定
+    - 一個chaincode被安裝在組織的對等體上，然後部署到一個通道上，然後它可以用來認可交易並與區塊鏈分類賬進行互動。
+    - 在將chaincode部署到通道之前，通道的成員需要對建立chaincode治理的chaincode definition達成一致。當所需數量的組織同意時，chaincode definition可以提交給channel，chaincode 就可以使用了。
+
 5. Interacting with the network
 
     1. Environment variables for Org
@@ -52,166 +53,153 @@
         export CORE_PEER_MSPCONFIGPATH=${PWD}/organizations/peerOrganizations/org1.example.com/users/Admin@org1.example.com/msp
         export CORE_PEER_ADDRESS=localhost:7051
         ```
-      
+
     2. Init Ledger
-      
-        
-       
+
        ```sh
-    peer Chaincode invoke -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com --tls --cafile ${PWD}/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem -C mychannel -n basic --peerAddresses localhost:7051 --tlsRootCertFiles ${PWD}/organizations/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt --peerAddresses localhost:9051 --tlsRootCertFiles ${PWD}/organizations/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt -c '{"function":"InitLedger","Args":[]}'
-      ```
-      ```
+peer chaincode invoke -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com --tls --cafile ${PWD}/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem -C mychannel -n basic --peerAddresses localhost:7051 --tlsRootCertFiles ${PWD}/organizations/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt --peerAddresses localhost:9051 --tlsRootCertFiles ${PWD}/organizations/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt -c '{"function":"InitLedger","Args":[]}'
+        ```
     
-      ```
-
-      ```
-    
-      ```
-
     3. Get All Assets
-      
+
         ```sh
-    peer Chaincode query -C mychannel -n basic -c '{"Args":["GetAllAssets"]}'
-      ```
-      ```
-    
-      ```
+        peer chaincode query -C mychannel -n basic -c '{"Args":["GetAllAssets"]}'
+        ```
 
     4. Transfer Assets
-      
+    
         ```sh
-    peer Chaincode invoke -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com --tls --cafile ${PWD}/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem -C mychannel -n basic --peerAddresses localhost:7051 --tlsRootCertFiles ${PWD}/organizations/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt --peerAddresses localhost:9051 --tlsRootCertFiles ${PWD}/organizations/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt -c '{"function":"TransferAsset","Args":["asset6","Christopher"]}'
-      ```
-      ```
+    peer chaincode invoke -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com --tls --cafile ${PWD}/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem -C mychannel -n basic --peerAddresses localhost:7051 --tlsRootCertFiles ${PWD}/organizations/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt --peerAddresses localhost:9051 --tlsRootCertFiles ${PWD}/organizations/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt -c '{"function":"TransferAsset","Args":["asset6","Christopher"]}'
+        ```
     
     5. Environment variables for Org2
-      
+    
         ```sh
-        export CORE_PEER_TLS_ENABLED=true
+    export CORE_PEER_TLS_ENABLED=true
         export CORE_PEER_LOCALMSPID="Org2MSP"
         export CORE_PEER_TLS_ROOTCERT_FILE=${PWD}/organizations/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt
         export CORE_PEER_ADDRESS=localhost:9051
-      ```
-
-    6. Read Assest
-      
-       ```sh
-       peer Chaincode query -C mychannel -n basic -c '{"Args":["ReadAsset","asset6"]}'
-       ```
-
+    ```
+    
+6. Read Assest
+    
+        ```sh
+        peer chaincode query -C mychannel -n basic -c '{"Args":["ReadAsset","asset6"]}'
+    ```
+    
 6. Bring down the network
 
-	> The command will stop and remove the node and Chaincode containers, delete the organization crypto material, and remove the Chaincode images from your Docker Registry. The command also removes the channel artifacts and docker volumes from previous runs, allowing you to run `./network.sh up` again if you encountered any problems.
-	
-	```
-	./network.sh dow
-	```
+    > The command will stop and remove the node and chaincode containers, delete the organization crypto material, and remove the chaincode images from your Docker Registry. The command also removes the channel artifacts and docker volumes from previous runs, allowing you to run `./network.sh up` again if you encountered any problems.
+
+    ```
+    ./network.sh dow
+    ```
 
 ## Deploying a smart contract to a channel(Lab 2)
 
-在Hyperledger Fabric中，智慧合約部署在稱為Chaincode的package中。想要驗證交易或查詢帳本的組織需要在他們的peers身上安裝Chaincode。在連接到channel的peernode上安裝了Chaincode之後，channel成員可以將Chaincode部署到channel，並使用Chaincode中的智慧合約建立或更新通道分類帳上的資產。
+在Hyperledger Fabric中，智慧合約部署在稱為chaincode的package中。想要驗證交易或查詢帳本的組織需要在他們的peers身上安裝chaincode。在連接到channel的peer上安裝了chaincode之後，channel成員可以將chaincode部署到channel，並使用chaincode中的智慧合約建立或更新通道分類帳上的資產。
 
-Chaincode生命週期的流程首先會將Chaincode部署到通道上，然後允許多個組織在使用Chaincode建立交易之前就操作Chaincode的方式達成一致。
+chaincode生命週期的流程首先會將chaincode部署到通道上，然後允許多個組織在使用chaincode建立交易之前就操作chaincode的方式達成一致。
 
 1. Startup network
 
-   ```sh
-   ./network.sh down
-   ./network.sh up createChannel
-   ```
+    ```sh
+    ./network.sh down
+    ./network.sh up createChannel
+    ```
 
 2. Setup Logspout
 
-   - 這個工具將來自不同Docker容器的輸出流收集到一個位置，從而可以輕鬆地從單個視窗查看發生的情況。
+    - 這個工具將來自不同Docker容器的輸出收集到一個位置，從而可以輕鬆地從單個視窗查看發生的情況。
 
-   ```sh
-   cd fabric-samples/test-network
-   cp ../commercial-paper/organization/digibank/configuration/cli/monitordocker.sh .
-   ./monitordocker.sh net_test
-   ```
+    ```sh
+    cd fabric-samples/test-network
+    cp ../commercial-paper/organization/digibank/configuration/cli/monitordocker.sh .
+    ./monitordocker.sh net_test
+    ```
 
 3. Package the smart contract
 
-   ```sh
-   cd fabric-samples/asset-transfer-basic/Chaincode-go
-   cat go.mod
-   GO111MODULE=on go mod vendor
-   cd ../../test-network
-   export PATH=${PWD}/../bin:$PATH
-   export FABRIC_CFG_PATH=$PWD/../config/
-   peer lifecycle Chaincode package basic.tar.gz --path ../asset-transfer-basic/Chaincode-go/ --lang golang --label basic_1.0
-   ```
+    ```sh
+    cd fabric-samples/asset-transfer-basic/chaincode-go
+    cat go.mod
+    GO111MODULE=on go mod vendor
+    cd ../../test-network
+    export PATH=${PWD}/../bin:$PATH
+    export FABRIC_CFG_PATH=$PWD/../config/
+    peer lifecycle chaincode package basic.tar.gz --path ../asset-transfer-basic/chaincode-go/ --lang golang --label basic_1.0
+    ```
 
-4. Install the Chaincode package
+4. Install the chaincode package
 
-   ```sh
-   ## peer0.org1.example.com
-   export CORE_PEER_TLS_ENABLED=true
-   export CORE_PEER_LOCALMSPID="Org1MSP"
-   export CORE_PEER_TLS_ROOTCERT_FILE=${PWD}/organizations/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt
-   export CORE_PEER_MSPCONFIGPATH=${PWD}/organizations/peerOrganizations/org1.example.com/users/Admin@org1.example.com/msp
-   export CORE_PEER_ADDRESS=localhost:7051
-   
-   peer lifecycle Chaincode install basic.tar.gz
-   ```
-   
-   ```sh
-   ## peer0.org2.example.com
-   export CORE_PEER_TLS_ENABLED=true
-   export CORE_PEER_LOCALMSPID="Org2MSP"
-   export CORE_PEER_TLS_ROOTCERT_FILE=${PWD}/organizations/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt
-   export CORE_PEER_MSPCONFIGPATH=${PWD}/organizations/peerOrganizations/org2.example.com/users/Admin@org2.example.com/msp
-   export CORE_PEER_ADDRESS=localhost:9051
-   
-   peer lifecycle Chaincode install basic.tar.gz
-   ```
+    ```sh
+    ## peer0.org1.example.com
+    export CORE_PEER_TLS_ENABLED=true
+    export CORE_PEER_LOCALMSPID="Org1MSP"
+    export CORE_PEER_TLS_ROOTCERT_FILE=${PWD}/organizations/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt
+    export CORE_PEER_MSPCONFIGPATH=${PWD}/organizations/peerOrganizations/org1.example.com/users/Admin@org1.example.com/msp
+    export CORE_PEER_ADDRESS=localhost:7051
+    
+    peer lifecycle chaincode install basic.tar.gz
+    ```
 
-
-5. Approve a Chaincode definition
-   
-   Packeage ID 用於將 peer 安裝的 Chaincode 與同意的 Chaincode definition 相關聯，並允許組織使用 Chaincode 對交易進行背書。
-   
-   ```sh
-   ## Package ID
-   peer lifecycle Chaincode queryinstalled
-   ```
-   
-   Chaincode 是在組織級別上得到同意的，因此該命令僅需要針對一個peer，然後會使用 gossip 分發到組織內的其他peer上。 使用`peer lifecycle Chaincode approveformyorg`同意 Chaincode definition
-   
-   ```sh
-   ## 注意！每個人拿到的ID都不一樣
-   export CC_PACKAGE_ID=basic_1.0:4ec191e793b27e953ff2ede5a8bcc63152cecb1e4c3f301a26e22692c61967ad
-   
-   ## Org1 
-   export CORE_PEER_TLS_ENABLED=true
-   export CORE_PEER_LOCALMSPID="Org1MSP"
-   export CORE_PEER_MSPCONFIGPATH=${PWD}/organizations/peerOrganizations/org1.example.com/users/Admin@org1.example.com/msp
-   export CORE_PEER_TLS_ROOTCERT_FILE=${PWD}/organizations/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt
-   export CORE_PEER_ADDRESS=localhost:7051
-   
-   peer lifecycle Chaincode approveformyorg -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com --channelID mychannel --name basic --version 1.0 --package-id $CC_PACKAGE_ID --sequence 1 --tls --cafile ${PWD}/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem
-   
-   ## Org2
-   export CORE_PEER_LOCALMSPID="Org2MSP"
-   export CORE_PEER_TLS_ROOTCERT_FILE=${PWD}/organizations/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt
-   export CORE_PEER_MSPCONFIGPATH=${PWD}/organizations/peerOrganizations/org2.example.com/users/Admin@org2.example.com/msp
-   export CORE_PEER_ADDRESS=localhost:9051
-   
-   peer lifecycle Chaincode approveformyorg -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com --channelID mychannel --name basic --version 1.0 --package-id $CC_PACKAGE_ID --sequence 1 --tls --cafile ${PWD}/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem
-   ```
-   
-   我們可以向 `approveformyorg`命令提供`--signature-policy`或`--channel-config-policy`參數，以指定 Chaincode 背書策略。默認為多數決，[Endorsement Policies](https://hyperledger-fabric.readthedocs.io/en/release-2.2/endorsement-policies.html)。
-    	
-   需要具管理員身份的角色同意 Chaincode difinination。因此，`CORE_PEER_MSPCONFIGPATH`變數需要指向包含管理員身份的MSP資料夾，不能使用客戶端使用者同意 Chaincode difinination。同意需要提交給 ordering service，該服務將驗證管理員簽名，然後將同意分發給peer。
+    ```sh
+    ## peer0.org2.example.com
+    export CORE_PEER_TLS_ENABLED=true
+    export CORE_PEER_LOCALMSPID="Org2MSP"
+    export CORE_PEER_TLS_ROOTCERT_FILE=${PWD}/organizations/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt
+    export CORE_PEER_MSPCONFIGPATH=${PWD}/organizations/peerOrganizations/org2.example.com/users/Admin@org2.example.com/msp
+    export CORE_PEER_ADDRESS=localhost:9051
+    
+    peer lifecycle chaincode install basic.tar.gz
+    ```
 
 
-6. Committing the Chaincode definition to the channel
+5. Approve a chaincode definition
 
-    在足夠多的組織同意了 Chaincode difinination 之後，其中一個組織可以將 Chaincode difinination 提交給 channel，交易將會成功提交，並且 Chaincode difinination中同意的參數將在該channel上實現。
+    Packeage ID 用於將 peer 安裝的 chaincode 與同意的 chaincode definition 相關聯，並允許組織使用 chaincode 對交易進行背書。
+
+    ```sh
+    ## Package ID
+    peer lifecycle chaincode queryinstalled
+    ```
+
+    chaincode 是在組織級別上得到同意的，因此該命令僅需要針對一個peer，然後會使用 gossip 分發到組織內的其他peer上。 使用`peer lifecycle chaincode approveformyorg`同意 chaincode definition
+
+    ```sh
+    ## 注意！每個人拿到的ID都不一樣
+    export CC_PACKAGE_ID=basic_1.0:4ec191e793b27e953ff2ede5a8bcc63152cecb1e4c3f301a26e22692c61967ad
+    
+    ## Org1 
+    export CORE_PEER_TLS_ENABLED=true
+    export CORE_PEER_LOCALMSPID="Org1MSP"
+    export CORE_PEER_MSPCONFIGPATH=${PWD}/organizations/peerOrganizations/org1.example.com/users/Admin@org1.example.com/msp
+    export CORE_PEER_TLS_ROOTCERT_FILE=${PWD}/organizations/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt
+    export CORE_PEER_ADDRESS=localhost:7051
+    
+    peer lifecycle chaincode approveformyorg -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com --channelID mychannel --name basic --version 1.0 --package-id $CC_PACKAGE_ID --sequence 1 --tls --cafile ${PWD}/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem
+    
+    ## Org2
+    export CORE_PEER_LOCALMSPID="Org2MSP"
+    export CORE_PEER_TLS_ROOTCERT_FILE=${PWD}/organizations/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt
+    export CORE_PEER_MSPCONFIGPATH=${PWD}/organizations/peerOrganizations/org2.example.com/users/Admin@org2.example.com/msp
+    export CORE_PEER_ADDRESS=localhost:9051
+    
+    peer lifecycle chaincode approveformyorg -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com --channelID mychannel --name basic --version 1.0 --package-id $CC_PACKAGE_ID --sequence 1 --tls --cafile ${PWD}/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem
+    ```
+
+    我們可以向 `approveformyorg`命令提供`--signature-policy`或`--channel-config-policy`參數，以指定 chaincode 背書策略。默認為多數決，[Endorsement Policies](https://hyperledger-fabric.readthedocs.io/en/release-2.2/endorsement-policies.html)。
+     	
+    需要具管理員身份的角色同意 chaincode difinination。因此，`CORE_PEER_MSPCONFIGPATH`變數需要指向包含管理員身份的MSP資料夾，不能使用客戶端使用者同意 chaincode difinination。同意需要提交給 ordering service，該服務將驗證管理員簽名，然後將同意分發給peer。
+
+
+6. Committing the chaincode definition to the channel
+
+    在足夠多的組織同意了 chaincode difinination 之後，其中一個組織可以將 chaincode difinination 提交給 channel，交易將會成功提交，並且 chaincode difinination中同意的參數將在該channel上實現。
 
     ```sh
     ## 查看同意情形(check commit readiness)
-    peer lifecycle Chaincode checkcommitreadiness --channelID mychannel --name basic --version 1.0 --sequence 1 --tls --cafile ${PWD}/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem --output json
+    peer lifecycle chaincode checkcommitreadiness --channelID mychannel --name basic --version 1.0 --sequence 1 --tls --cafile ${PWD}/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem --output json
     
     ## Org1
     export CORE_PEER_TLS_ENABLED=true
@@ -221,40 +209,40 @@ Chaincode生命週期的流程首先會將Chaincode部署到通道上，然後�
     export CORE_PEER_ADDRESS=localhost:7051
         
     ## Commit
-    peer lifecycle Chaincode commit -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com --channelID mychannel --name basic --version 1.0 --sequence 1 --tls --cafile ${PWD}/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem --peerAddresses localhost:7051 --tlsRootCertFiles ${PWD}/organizations/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt --peerAddresses localhost:9051 --tlsRootCertFiles ${PWD}/organizations/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt
+    peer lifecycle chaincode commit -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com --channelID mychannel --name basic --version 1.0 --sequence 1 --tls --cafile ${PWD}/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem --peerAddresses localhost:7051 --tlsRootCertFiles ${PWD}/organizations/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt --peerAddresses localhost:9051 --tlsRootCertFiles ${PWD}/organizations/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt
     ```
-    
-    上面的交易使用`peerAddresses`針對Org1的peer0.org1.example.com、Org2的peer0.org2.example.com。提交的交易被提交到連接到channel的peer。該命令需要以足夠多的組織為目標，以滿足部署 Chaincode 的策略。由於同意分佈在每個組織中，所以可以針對屬於channel成員的任何peer。
-    
-    Channel member 對 Chaincode difinination 的背書將提交給ordering service，以添加到區塊中並分發給channel。 然後，channel上的peers將驗證是否有足夠的組織同意了Chaincode difinination。`peer lifecycle Chaincode commit`命令將等待peer的驗證才返回回應。
-    
+
+    上面的交易使用`peerAddresses`針對Org1的peer0.org1.example.com、Org2的peer0.org2.example.com。提交的交易被提交到連接到channel的peer。該命令需要以足夠多的組織為目標，以滿足部署 chaincode 的策略。由於同意分佈在每個組織中，所以可以針對屬於channel成員的任何peer。
+
+    Channel member 對 chaincode difinination 的背書將提交給ordering service，以添加到區塊中並分發給channel。 然後，channel上的peers將驗證是否有足夠的組織同意了chaincode difinination。`peer lifecycle chaincode commit`命令將等待peer的驗證才返回回應。
+
     ```sh
     ## 查訊 commit 情形
-	peer lifecycle Chaincode querycommitted --channelID mychannel --name basic --cafile ${PWD}/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem
+    peer lifecycle chaincode querycommitted --channelID mychannel --name basic --cafile ${PWD}/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem
     ```
-    
-7. Invoking the Chaincode
 
-    在Chaincode difinination被提交到channel後，Chaincode將在加入channel有安裝Chaincode的peers上啓動。
+7. Invoking the chaincode
 
-    使用 `peer Chaincode invoke`呼叫Chaincode以及`peer Chaincode query`查詢結果
+    在chaincode difinination被提交到channel後，chaincode將在加入channel有安裝chaincode的peers上啓動。
+
+    使用 `peer chaincode invoke`呼叫chaincode以及`peer chaincode query`查詢結果
 
     ```sh
-    peer Chaincode invoke -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com --tls --cafile ${PWD}/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem -C mychannel -n basic --peerAddresses localhost:7051 --tlsRootCertFiles ${PWD}/organizations/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt --peerAddresses localhost:9051 --tlsRootCertFiles ${PWD}/organizations/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt -c '{"function":"InitLedger","Args":[]}'
-
+    peer chaincode invoke -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com --tls --cafile ${PWD}/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem -C mychannel -n basic --peerAddresses localhost:7051 --tlsRootCertFiles ${PWD}/organizations/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt --peerAddresses localhost:9051 --tlsRootCertFiles ${PWD}/organizations/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt -c '{"function":"InitLedger","Args":[]}'
+    
     ## 查詢
-    peer Chaincode query -C mychannel -n basic -c '{"Args":["GetAllAssets"]}'
+    peer chaincode query -C mychannel -n basic -c '{"Args":["GetAllAssets"]}'
     ```
 
 8. Upgrading a smart contract
 
-    channel成員可以通過安裝新的Chaincode package，然後用新的package ID、新的Chaincode版本以及遞增序列號來升級Chaincode。新的Chaincode可以在Chaincode difinination提交給channel後使用。這個過程允許channel成員協調Chaincode升級的時間，並確保在新的Chaincode被部署到channel之前，有足夠數量的Chaincode成員準備好使用新的Chaincode。通過同意帶有新的背書策略的Chaincode difinination，並將Chaincode difinination提交給channel，chnnel成員可以更改管理Chaincode的背書策略，而無需安裝新的Chaincode package。
+    channel成員可以通過安裝新的chaincode package，然後用新的package ID、新的chaincode版本以及遞增序列號來升級chaincode。新的chaincode可以在chaincode difinination提交給channel後使用。這個過程允許channel成員協調chaincode升級的時間，並確保在新的chaincode被部署到channel之前，有足夠數量的chaincode成員準備好使用新的chaincode。通過同意帶有新的背書策略的chaincode difinination，並將chaincode difinination提交給channel，chnnel成員可以更改管理chaincode的背書策略，而無需安裝新的chaincode package。
 
     以下將以JS語言代替GO語言寫成的package當作**升級範例**：
 
     ```sh
     ## npm install
-    cd ../asset-transfer-basic/Chaincode-javascript
+    cd ../asset-transfer-basic/chaincode-javascript
     npm install
     cd ../../test-network
     
@@ -262,7 +250,7 @@ Chaincode生命週期的流程首先會將Chaincode部署到通道上，然後�
     export PATH=${PWD}/../bin:$PATH
     export FABRIC_CFG_PATH=$PWD/../config/
     export CORE_PEER_MSPCONFIGPATH=${PWD}/organizations/peerOrganizations/org1.example.com/users/Admin@org1.example.com/msp
-    peer lifecycle Chaincode package basic_2.tar.gz --path ../asset-transfer-basic/Chaincode-javascript/ --lang node --label basic_2.0
+    peer lifecycle chaincode package basic_2.tar.gz --path ../asset-transfer-basic/chaincode-javascript/ --lang node --label basic_2.0
     
     ## Org1
     export CORE_PEER_TLS_ENABLED=true
@@ -272,14 +260,14 @@ Chaincode生命週期的流程首先會將Chaincode部署到通道上，然後�
     export CORE_PEER_ADDRESS=localhost:7051
     
     ## install package
-    peer lifecycle Chaincode install basic_2.tar.gz
+    peer lifecycle chaincode install basic_2.tar.gz
     
     ## query installed(注意！package id 會不同)
-    peer lifecycle Chaincode queryinstalled
+    peer lifecycle chaincode queryinstalled
     
-    ## approve a new Chaincode definition
+    ## approve a new chaincode definition
     export NEW_CC_PACKAGE_ID=basic_2.0:4603980dac5d585e20e181b3ddc7c1d063dc62c3b39bb4e2b271217cde2d9e4d
-    peer lifecycle Chaincode approveformyorg -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com --channelID mychannel --name basic --version 2.0 --package-id $NEW_CC_PACKAGE_ID --sequence 2 --tls --cafile ${PWD}/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem
+    peer lifecycle chaincode approveformyorg -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com --channelID mychannel --name basic --version 2.0 --package-id $NEW_CC_PACKAGE_ID --sequence 2 --tls --cafile ${PWD}/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem
     
     ## Org2
     export CORE_PEER_LOCALMSPID="Org2MSP"
@@ -289,25 +277,25 @@ Chaincode生命週期的流程首先會將Chaincode部署到通道上，然後�
     export CORE_PEER_ADDRESS=localhost:9051
     
     ## install package
-    peer lifecycle Chaincode install basic_2.tar.gz
+    peer lifecycle chaincode install basic_2.tar.gz
     
-    ## approve a new Chaincode definition
-    peer lifecycle Chaincode approveformyorg -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com --channelID mychannel --name basic --version 2.0 --package-id $NEW_CC_PACKAGE_ID --sequence 2 --tls --cafile ${PWD}/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem
+    ## approve a new chaincode definition
+    peer lifecycle chaincode approveformyorg -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com --channelID mychannel --name basic --version 2.0 --package-id $NEW_CC_PACKAGE_ID --sequence 2 --tls --cafile ${PWD}/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem
     
     ## check commited readiness
-    peer lifecycle Chaincode checkcommitreadiness --channelID mychannel --name basic --version 2.0 --sequence 2 --tls --cafile ${PWD}/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem --output json
+    peer lifecycle chaincode checkcommitreadiness --channelID mychannel --name basic --version 2.0 --sequence 2 --tls --cafile ${PWD}/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem --output json
     
     ## commit
-    peer lifecycle Chaincode commit -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com --channelID mychannel --name basic --version 2.0 --sequence 2 --tls --cafile ${PWD}/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem --peerAddresses localhost:7051 --tlsRootCertFiles ${PWD}/organizations/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt --peerAddresses localhost:9051 --tlsRootCertFiles ${PWD}/organizations/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt
+    peer lifecycle chaincode commit -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com --channelID mychannel --name basic --version 2.0 --sequence 2 --tls --cafile ${PWD}/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem --peerAddresses localhost:7051 --tlsRootCertFiles ${PWD}/organizations/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt --peerAddresses localhost:9051 --tlsRootCertFiles ${PWD}/organizations/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt
     
     ## verify result
     docker ps
     
     ## invoke
-    peer Chaincode invoke -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com --tls --cafile ${PWD}/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem -C mychannel -n basic --peerAddresses localhost:7051 --tlsRootCertFiles ${PWD}/organizations/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt --peerAddresses localhost:9051 --tlsRootCertFiles ${PWD}/organizations/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt -c '{"function":"CreateAsset","Args":["asset8","blue","16","Kelley","750"]}'
+    peer chaincode invoke -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com --tls --cafile ${PWD}/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem -C mychannel -n basic --peerAddresses localhost:7051 --tlsRootCertFiles ${PWD}/organizations/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt --peerAddresses localhost:9051 --tlsRootCertFiles ${PWD}/organizations/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt -c '{"function":"CreateAsset","Args":["asset8","blue","16","Kelley","750"]}'
     
     ## query
-    peer Chaincode query -C mychannel -n basic -c '{"Args":["GetAllAssets"]}'
+    peer chaincode query -C mychannel -n basic -c '{"Args":["GetAllAssets"]}'
     ```
 
 9. Clean up
@@ -327,7 +315,7 @@ Chaincode生命週期的流程首先會將Chaincode部署到通道上，然後�
 -   Sample application: `asset-transfer-basic/application-javascript`
 -   Smart contract : `asset-transfer-basic/chaincode-(javascript, java, go, typescript)`
 
-1.  Set up the blockchain network(先安裝好 npm)
+1.  全部流程
 
     ```sh
     ## 啟動網路
@@ -339,16 +327,23 @@ Chaincode生命週期的流程首先會將Chaincode部署到通道上，然後�
 
     ```sh
     ## 範例應用
-    cd asset-transfer-basic/application-javascript
+    cd ../asset-transfer-basic/application-javascript
+    rm -rf wallet/
     npm install
     node app.js
+    cd ../../test-network/
+    ./network.sh down
     ```
 
-    在第一步中啟動Fabric測試網絡時，建立了一個管理員用戶(admin)作為憑證頒發機構(CA)的註冊商。 我們的第一步是通過讓應用程序呼叫enrollAdmin來生成用於管理的公私鑰和X.509證書。 此過程使用憑證簽名請求(CSR): 首先在本地生成公私鑰，然後將公鑰發送到CA，CA傳回編碼的憑證以供應用程式使用，然後這些憑證會儲存在錢包中，使我們能夠充當CA的管理員。
+2.  Start test-network -> deploy basic
 
-2.  The application enrolls the admin user
+3.  The application enrolls the admin user
 
-    需要注意的是，註冊管理員和註冊應用程式使用者是發生在應用程式和憑證頒發機構之間的互動，而不是應用程式和Chaincode之間的互動。
+    建立了一個管理員用戶(admin)作為憑證頒發機構(CA)的註冊商。
+
+    我們的第一步是通過應用程式呼叫enrollAdmin來生成用於管理的公私鑰和X.509證書。 此過程使用憑證簽名請求(CSR): 首先在本地生成公私鑰，然後將公鑰發送到CA，CA傳回編碼的憑證以供應用程式使用，然後這些憑證會儲存在錢包中，使我們能夠充當CA的管理員。
+
+    需要注意的是，註冊管理員和註冊應用程式使用者是發生在應用程式和憑證頒發機構之間的互動，而不是應用程式和chaincode之間的互動。
 
     ```js
     async function main() {
@@ -377,7 +372,7 @@ Chaincode生命週期的流程首先會將Chaincode部署到通道上，然後�
 
     (注！重啟需要刪掉wallet資料夾)
 
-3.  The application registers and enrolls an application user
+4.  The application registers and enrolls an application user
 
     ```js
         // in a real application this would be done only when a new user was required to be added
@@ -392,7 +387,7 @@ Chaincode生命週期的流程首先會將Chaincode部署到通道上，然後�
 
     與管理員註冊類似，這個功能使用CSR來註冊appUser，並將其憑證與管理員的憑證一起儲存在錢包中。現在我們有了兩個獨立用戶的身份admin和appUser
 
-4.  The sample application prepares a connection to the channel and smart contract
+5.  The sample application prepares a connection to the channel and smart contract
 
     ```js
     // Create a new gateway instance for interacting with the fabric network.
@@ -425,7 +420,7 @@ Chaincode生命週期的流程首先會將Chaincode部署到通道上，然後�
 
     應用程式正在通過閘道使用合約名稱和channel名稱來引用合約
 
-5.  The application initializes the ledger with some sample data
+6.  The application initializes the ledger with some sample data
 
     ```js
     // Initialize a set of asset data on the channel using the chaincode 'InitLedger' function.
@@ -500,7 +495,7 @@ Chaincode生命週期的流程首先會將Chaincode部署到通道上，然後�
 
     
 
-6.  The application invokes each of the chaincode functions
+7.  The application invokes each of the chaincode functions
 
     `evaluateTransaction()`函數用於當你想查詢單個peer，而不向ordering service 提交交易時。
 
@@ -536,8 +531,8 @@ Chaincode生命週期的流程首先會將Chaincode部署到通道上，然後�
     ```
 
     >```
-    >  Evaluate Transaction: GetAllAssets, function returns all the current assets on the ledger
-    >  Result: [...]
+    >Evaluate Transaction: GetAllAssets, function returns all the current assets on the ledger
+    >Result: [...]
     >```
 
     CreateAsset，asset13
@@ -591,11 +586,11 @@ Chaincode生命週期的流程首先會將Chaincode部署到通道上，然後�
     >```
     >Evaluate Transaction: ReadAsset, function returns an asset with a given assetID
     >Result: {
-    >  "ID": "asset13",
-    >  "Color": "yellow",
-    >  "Size": "5",
-    >  "Owner": "Tom",
-    >  "AppraisedValue": "1300"
+    >"ID": "asset13",
+    >"Color": "yellow",
+    >"Size": "5",
+    >"Owner": "Tom",
+    >"AppraisedValue": "1300"
     >}
     >```
 
@@ -656,11 +651,11 @@ Chaincode生命週期的流程首先會將Chaincode部署到通道上，然後�
     >
     >Evaluate Transaction: ReadAsset, function returns "asset1" attributes
     >Result: {
-    >  "ID": "asset1",
-    >  "Color": "blue",
-    >  "Size": "5",
-    >  "Owner": "Tomoko",
-    >  "AppraisedValue": "350"
+    >"ID": "asset1",
+    >"Color": "blue",
+    >"Size": "5",
+    >"Owner": "Tomoko",
+    >"AppraisedValue": "350"
     >}
     >```
 
@@ -680,21 +675,20 @@ Chaincode生命週期的流程首先會將Chaincode部署到通道上，然後�
     >Submit Transaction: TransferAsset asset1, transfer to new owner of Tom
     >Evaluate Transaction: ReadAsset, function returns "asset1" attributes
     >Result: {
-    >  "ID": "asset1",
-    >  "Color": "blue",
-    >  "Size": "5",
-    >  "Owner": "Tom",
-    >  "AppraisedValue": "350"
+    >"ID": "asset1",
+    >"Color": "blue",
+    >"Size": "5",
+    >"Owner": "Tom",
+    >"AppraisedValue": "350"
     >}
     >```
 
-7.  clean up
+8.  clean up
 
     ```sh
     ./network.sh down
     ```
 
-    
 
 ## Commercial paper tutorial(Lab 4)
 
@@ -806,8 +800,8 @@ Chaincode生命週期的流程首先會將Chaincode部署到通道上，然後�
 
     ```sh
     ## Magnetocorp(issabela)
-    cd organization/magnetocorp
-    code application
+    ## organization/magnetocorp/application
+    cd application
     npm install
     ```
 
@@ -827,6 +821,7 @@ Chaincode生命週期的流程首先會將Chaincode部署到通道上，然後�
     ## 運行在PaperNet上的MagnetoCorp憑證頒發機構ca_org2有一個應用程式使用者，該使用者是在部署網路時註冊的。Isabella可以使用身份名稱和秘密(enrollmentSecret)為issue.js應用產生X.509加密材料。使用CA產生客戶端加密材料的過程被稱為註冊。在一個實際場景中，網路營運商向應用程式開發者提供CA註冊要的客戶端身份名稱和秘密，然後開發人員將使用該信物來註冊他們的應用程式並與網路互動。
     
     ## enrollUser.js 使用fabric-ca-client來生成公私鑰對，然後向CA發出憑證簽署請求。如果Isabella提交的使用者和秘密與CA註冊的信物相匹配，CA就會簽發一份憑證，確定Isabella屬於MagnetoCorp。當簽名請求完成後，enrollUser.js會將私鑰和簽名憑證存儲存在Isabella的錢包裡。
+    rm ../identity/user/isabella/wallet/*
     node enrollUser.js
     cat ../identity/user/isabella/wallet/*
     node issue.js
@@ -837,8 +832,8 @@ Chaincode生命週期的流程首先會將Chaincode部署到通道上，然後�
 
     ```sh
     ## Digibank(Balaji)
-    cd organization/digibank/application/
-    code buy.js
+    ## organization/digibank/application/
+    cd application
     npm install
     ```
 
@@ -850,6 +845,7 @@ Chaincode生命週期的流程首先會將Chaincode部署到通道上，然後�
     在 Balaji 的 wallet 中產生 X.509 certificate，然後執行`buy.js`，
 
     ```sh
+    rm ../identity/user/balaji/wallet/*
     node enrollUser.js
     cat ../identity/user/balaji/wallet/*
     node buy.js
@@ -932,8 +928,6 @@ Chaincode生命週期的流程首先會將Chaincode部署到通道上，然後�
     ```
 
     所有使用chaincode的組織都需要部署同一個集合定義文件，即使該組織不屬於任何集合。除了在集合文件中明確定義的集合之外，每個組織還可以訪問其peer上的隱式集合，該集合只能由其組織讀取。
-
-    
 
 3. Read and Write private data using chaincode APIs
 
@@ -1271,27 +1265,27 @@ Chaincode生命週期的流程首先會將Chaincode部署到通道上，然後�
 
 2.   Use two terminals to represent Org1 & Org2
 
-    ```sh
-    ## Org1
-    export PATH=${PWD}/../bin:${PWD}:$PATH
-    export FABRIC_CFG_PATH=$PWD/../config/
-    export CORE_PEER_TLS_ENABLED=true
-    export CORE_PEER_LOCALMSPID="Org1MSP"
-    export CORE_PEER_MSPCONFIGPATH=${PWD}/organizations/peerOrganizations/org1.example.com/users/Admin@org1.example.com/msp
-    export CORE_PEER_TLS_ROOTCERT_FILE=${PWD}/organizations/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt
-    export CORE_PEER_ADDRESS=localhost:7051
-    ```
+     ```sh
+     ## Org1
+     export PATH=${PWD}/../bin:${PWD}:$PATH
+     export FABRIC_CFG_PATH=$PWD/../config/
+     export CORE_PEER_TLS_ENABLED=true
+     export CORE_PEER_LOCALMSPID="Org1MSP"
+     export CORE_PEER_MSPCONFIGPATH=${PWD}/organizations/peerOrganizations/org1.example.com/users/Admin@org1.example.com/msp
+     export CORE_PEER_TLS_ROOTCERT_FILE=${PWD}/organizations/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt
+     export CORE_PEER_ADDRESS=localhost:7051
+     ```
 
-    ```sh
-    ## Org2
-    export PATH=${PWD}/../bin:${PWD}:$PATH
-    export FABRIC_CFG_PATH=$PWD/../config/
-    export CORE_PEER_TLS_ENABLED=true
-    export CORE_PEER_LOCALMSPID="Org2MSP"
-    export CORE_PEER_MSPCONFIGPATH=${PWD}/organizations/peerOrganizations/org2.example.com/users/Admin@org2.example.com/msp
-    export CORE_PEER_TLS_ROOTCERT_FILE=${PWD}/organizations/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt
-    export CORE_PEER_ADDRESS=localhost:9051
-    ```
+     ```sh
+     ## Org2
+     export PATH=${PWD}/../bin:${PWD}:$PATH
+     export FABRIC_CFG_PATH=$PWD/../config/
+     export CORE_PEER_TLS_ENABLED=true
+     export CORE_PEER_LOCALMSPID="Org2MSP"
+     export CORE_PEER_MSPCONFIGPATH=${PWD}/organizations/peerOrganizations/org2.example.com/users/Admin@org2.example.com/msp
+     export CORE_PEER_TLS_ROOTCERT_FILE=${PWD}/organizations/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt
+     export CORE_PEER_ADDRESS=localhost:9051
+     ```
 
 3.  Create an asset
 
@@ -1409,6 +1403,7 @@ Chaincode生命週期的流程首先會將Chaincode部署到通道上，然後�
       目前狀態(Key/Value)：
 
       -   Channel World State
+
           -   assest1/owner-Org2
           -   h(assest1)/h(details)
 
@@ -1423,6 +1418,206 @@ Chaincode生命週期的流程首先會將Chaincode部署到通道上，然後�
           -   B:assest1/100
 
 6.  Clean up
+
+    ```sh
+    ./network.sh down
+    ```
+
+## Using CouchDB(Lab 7)
+
+本教學將介紹使用CouchDB作為Hyperledger Fabric的狀態資料庫。將使用資產轉移帳本查詢案例來演示如何使用CouchDB與Fabric，包括對狀態資料庫執行JSON查詢。
+
+Fabric支持兩種類型的peer狀態資料庫
+
+-   LevelDB是嵌入在peer中的默認狀態資料庫。LevelDB將chaincode資料儲存為key-value，只支持key、range key和composite key查詢。
+
+-   CouchDB是另一個可選的選擇，它允許將帳本上的資料建模為JSON，並針對資料value(而不是key)執行查詢。CouchDB還支援使用chaincode部署index，提高查詢效率。
+
+    -   使用：編輯core.yaml的stateDatabase部分。指定CouchDB為stateDatabase，並填寫相關的couchDBConfig屬性。[CouchDB configuration](https://hyperledger-fabric.readthedocs.io/en/latest/couchdb_as_state_database.html#couchdb-configuration)
+
+    -   index: 索引允許查詢資料庫時不必查詢每一行，從而使它們運行得更快、更有效。要定義索引，需要三項資訊，並放在`META-INF/statedb/couchdb/indexes`
+
+        -   欄位：這些是要查詢的欄位
+        -   名稱：索引名稱
+        -   類型：在此情境永遠為"json"
+
+    -   在每個chaincode中只安裝幾個支持大部分查詢的索引。添加過多的索引，或者在索引中使用過多的字欄位，會降低網路的性能。這是因為索引是在每個區塊提交後更新的(index warming)。
+
+    -   ```go
+        type Asset struct {
+                DocType        string `json:"docType"` //docType is used to distinguish the various types of objects in state database
+                ID             string `json:"ID"`      //the field tags are needed to keep case from bouncing around
+                Color          string `json:"color"`
+                Size           int    `json:"size"`
+                Owner          string `json:"owner"`
+                AppraisedValue int    `json:"appraisedValue"`
+        }
+        ```
+
+        ```go
+        {
+          "index":{
+              "fields":["owner"] // Names of the fields to be queried
+          },
+          "ddoc":"index1Doc", // (optional) Name of the design document in which the index will be created.
+          "name":"index1",
+          "type":"json"
+        }
+        
+        {
+          "index":{
+              "fields":["owner", "color"] // Names of the fields to be queried
+          },
+          "ddoc":"index2Doc", // (optional) Name of the design document in which the index will be created.
+          "name":"index2",
+          "type":"json"
+        }
+        
+        {
+          "index":{
+              "fields":["owner", "color", "size"] // Names of the fields to be queried
+          },
+          "ddoc":"index3Doc", // (optional) Name of the design document in which the index will be created.
+          "name":"index3",
+          "type":"json"
+        }
+        ```
+
+1.  Start the network & Deploy the smart contract
+
+    ```sh
+    cd ../asset-transfer-ledger-queries/chaincode-go
+    GO111MODULE=on go mod vendor
+    cd ../../test-network
+    ./network.sh up createChannel -s couchdb
+    ./network.sh deployCC -ccn ledger -ccp ../asset-transfer-ledger-queries/chaincode-go/ -ccl go -ccep "OR('Org1MSP.peer','Org2MSP.peer')"
+    ```
+
+    verify index was deployed
+
+    ```sh
+    docker logs peer0.org1.example.com  2>&1 | grep "CouchDB index"
+    ```
+
+2.  Query the CouchDB State Database
+
+    -    QueryAssest: 即席 JSON 查詢範例，將JSON 查詢字串傳遞到函數，這對運行時客戶端動態建立查詢有幫助
+        -   `{"selector":{"docType":"asset","owner":"tom"}`: 
+        -   `"use_index":["_design/indexOwnerDoc", "indexOwner"]`: ddoc / index name
+    -   QueryAssetsByOwner: 參數化查詢範例，在chaincode中定義查詢傳遞一個查詢參數。在這種情況下，即資產擁有者，然後，它使用JSON查詢語法在狀態資料庫中查詢符合擁有者id以及docType為 "asset "的 JSON 文件。
+
+    ```sh
+    ## export bin & config
+    export PATH=${PWD}/../bin:${PWD}:$PATH
+    export FABRIC_CFG_PATH=$PWD/../config/
+    
+    ## Org1
+    export CORE_PEER_TLS_ENABLED=true
+    export CORE_PEER_LOCALMSPID="Org1MSP"
+    export CORE_PEER_TLS_ROOTCERT_FILE=${PWD}/organizations/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt
+    export CORE_PEER_MSPCONFIGPATH=${PWD}/organizations/peerOrganizations/org1.example.com/users/Admin@org1.example.com/msp
+    export CORE_PEER_ADDRESS=localhost:7051
+    
+    ## CreateAssest
+    peer chaincode invoke -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com --tls --cafile ${PWD}/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem -C mychannel -n ledger -c '{"Args":["CreateAsset","asset1","blue","5","tom","35"]}'
+    
+    ## Rich Query with index name explicitly specified:
+    peer chaincode query -C mychannel -n ledger -c '{"Args":["QueryAssets", "{\"selector\":{\"docType\":\"asset\",\"owner\":\"tom\"}, \"use_index\":[\"_design/indexOwnerDoc\", \"indexOwner\"]}"]}'
+    ```
+
+    以下是 index 和幾個查詢範例
+
+    -   索引中的欄位也必須在你的查詢的選擇器或排序片段，才能使用索引。
+    -   更複雜的查詢將具有較低的性能，並且不太可能使用索引。
+    -   避免使用會導致全表掃描或全索引掃描的操作行為，如`$or`、`$in`和`$regex`。
+    -   Example
+        1.  這個查詢完全支持索引
+        2.  這個查詢仍然使用索引，但會額外掃描其他欄位
+        3.  這個查詢無法使用索引，將不得不掃描整個數據庫
+        4.  這個查詢仍然使用索引，但查詢中的`$or`條件需要掃描索引中的所有項目
+        5.  這個查詢不會使用索引，因為它需要搜索整個表來滿足`$or`條件
+
+    ```json
+    {
+      "index": {
+        "fields": [
+          "docType",
+          "owner"
+        ]
+      },
+      "ddoc": "indexOwnerDoc",
+      "name": "indexOwner",
+      "type": "json"
+    }
+    ```
+
+    ```sh
+    export CHANNEL_NAME=mychannel
+    
+    ## Example one: query fully supported by the index
+    peer chaincode query -C $CHANNEL_NAME -n ledger -c '{"Args":["QueryAssets", "{\"selector\":{\"docType\":\"asset\",\"owner\":\"tom\"}, \"use_index\":[\"indexOwnerDoc\", \"indexOwner\"]}"]}'
+    
+    ## Example two: query fully supported by the index with additional data
+    peer chaincode query -C $CHANNEL_NAME -n ledger -c '{"Args":["QueryAssets", "{\"selector\":{\"docType\":\"asset\",\"owner\":\"tom\",\"color\":\"blue\"}, \"use_index\":[\"/indexOwnerDoc\", \"indexOwner\"]}"]}'
+    
+    ## Example three: query not supported by the index
+    peer chaincode query -C $CHANNEL_NAME -n ledger -c '{"Args":["QueryAssets", "{\"selector\":{\"owner\":\"tom\"}, \"use_index\":[\"indexOwnerDoc\", \"indexOwner\"]}"]}'
+    
+    ## Example four: query with $or supported by the index
+    peer chaincode query -C $CHANNEL_NAME -n ledger -c '{"Args":["QueryAssets", "{\"selector\":{\"$or\":[{\"docType\":\"asset\"},{\"owner\":\"tom\"}]}, \"use_index\":[\"indexOwnerDoc\", \"indexOwner\"]}"]}'
+    
+    ## Example five: Query with $or not supported by the index
+    peer chaincode query -C $CHANNEL_NAME -n ledger -c '{"Args":["QueryAssets", "{\"selector\":{\"$or\":[{\"docType\":\"asset\",\"owner\":\"tom\"},{\"color\":\"yellow\"}]}, \"use_index\":[\"indexOwnerDoc\", \"indexOwner\"]}"]}'
+    
+    ```
+
+    注意使用索引並不是收集大量數據的解決方案。區塊鏈資料結構經過優化，用於驗證和確認交易，不適合資料分析或報告。最好的做法是查詢一個複製peer的鏈外資料庫。可以使用來自應用程式的區塊或鏈碼事件將交易資料寫入鏈外資料庫或分析引擎。[off_chain_data](https://github.com/hyperledger/fabric-samples/tree/master/off_chain_data)
+
+3.  Query the CouchDB State Database With Pagination
+
+    -   [topic on pagination with CouchDB](https://hyperledger-fabric.readthedocs.io/en/latest/couchdb_as_state_database.html#couchdb-pagination)
+    -   QueryAssetsWithPagination: 分頁即席 JSON 查詢範例
+        -   pagesize: 一頁幾筆
+        -   bookmark: 書籤，告訴couchDB從哪筆開始
+    -   getQueryResultForQueryStringWithPagination: [Iterate code](https://github.com/hyperledger/fabric-samples/blob/master/asset-transfer-ledger-queries/chaincode-go/asset_transfer_ledger_chaincode.go)
+
+    ```sh
+    ## 增加幾筆資料
+    peer chaincode invoke -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com --tls --cafile  ${PWD}/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem -C mychannel -n ledger -c '{"Args":["CreateAsset","asset2","yellow","5","tom","35"]}'
+    peer chaincode invoke -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com --tls --cafile  ${PWD}/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem -C mychannel -n ledger -c '{"Args":["CreateAsset","asset3","green","6","tom","20"]}'
+    peer chaincode invoke -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com --tls --cafile  ${PWD}/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem -C mychannel -n ledger -c '{"Args":["CreateAsset","asset4","purple","7","tom","20"]}'
+    peer chaincode invoke -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com --tls --cafile  ${PWD}/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem -C mychannel -n ledger -c '{"Args":["CreateAsset","asset5","blue","8","tom","40"]}'
+    ```
+
+    ```sh
+    ## pagesize = 3, bookmark = ""
+    peer chaincode query -C mychannel -n ledger -c '{"Args":["QueryAssetsWithPagination", "{\"selector\":{\"docType\":\"asset\",\"owner\":\"tom\"}, \"use_index\":[\"_design/indexOwnerDoc\", \"indexOwner\"]}","3",""]}'
+    
+    ## pagesize = 3, bookmark = 第三筆
+    peer chaincode query -C mychannel -n ledger -c '{"Args":["QueryAssetsWithPagination", "{\"selector\":{\"docType\":\"asset\",\"owner\":\"tom\"}, \"use_index\":[\"_design/indexOwnerDoc\", \"indexOwner\"]}","3","g1AAAABJeJzLYWBgYMpgSmHgKy5JLCrJTq2MT8lPzkzJBYqzJRYXp5YYg2Q5YLI5IPUgSVawJIjFXJKfm5UFANozE8s"]}'
+    ```
+
+4.  Update/Delete an Index(Fauxton interface)
+
+    要更新索引，請使用相同的索引名稱，但更改索引欄位(另外Fabric只支持索引類型為JSON)，當chaincode definition提交到channel時，更新後的索引被重新部署到peer的狀資料庫中。索引名稱或ddoc屬性的更改將導致建立新的索引，並且在CouchDB中原始索引保持不變，直到它被刪除。
+
+    -   更新chaincode：參考 Lab2 & [Changing Endorsement Policy and Chaincode Upgrade After Chaincode Committed (Hyperledger Fabric 2.0)](https://kctheservant.medium.com/changing-endorsement-policy-and-chaincode-upgrade-after-chaincode-committed-hyperledger-fabric-cfa87fec4594)
+
+    -   Fauxton 介面是一個用於建立、更新和部署索引到CouchDB的Web UI。 http://localhost:5984/_utils/
+        -   COUCHDB_USER=admin
+        -   COUCHDB_PASSWORD=adminpw
+
+    -   CLI CURL
+
+    ```sh
+    ## Index for docType, owner.
+    ##Example curl command line to define index in the CouchDB channel_chaincode database
+    curl -i -X POST -H "Content-Type: application/json" -u admin:adminpw -d "{\"index\":{\"fields\":[\"docType\",\"owner\"]},\"name\":\"indexOwner\",\"ddoc\":\"indexOwnerDoc\",\"type\":\"json\"}" http://localhost:5984/mychannel_ledger/_index
+     
+    curl -X DELETE -H "accept: */*" -u admin:adminpw http://localhost:5984/mychannel_ledger/_index/indexOwnerDoc/json/indexOwner
+    ```
+
+5.  Cleanup
 
     ```sh
     ./network.sh down
