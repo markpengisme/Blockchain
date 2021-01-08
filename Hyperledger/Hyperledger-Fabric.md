@@ -58,7 +58,7 @@
 
        ```sh
 peer chaincode invoke -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com --tls --cafile ${PWD}/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem -C mychannel -n basic --peerAddresses localhost:7051 --tlsRootCertFiles ${PWD}/organizations/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt --peerAddresses localhost:9051 --tlsRootCertFiles ${PWD}/organizations/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt -c '{"function":"InitLedger","Args":[]}'
-        ```
+       ```
     
     3. Get All Assets
 
@@ -79,12 +79,17 @@ peer chaincode invoke -o localhost:7050 --ordererTLSHostnameOverride orderer.exa
         export CORE_PEER_LOCALMSPID="Org2MSP"
         export CORE_PEER_TLS_ROOTCERT_FILE=${PWD}/organizations/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt
         export CORE_PEER_ADDRESS=localhost:9051
+        ```
+    ```
+    
     ```
     
 6. Read Assest
-    
+   
         ```sh
         peer chaincode query -C mychannel -n basic -c '{"Args":["ReadAsset","asset6"]}'
+    ```
+    
     ```
     
 6. Bring down the network
@@ -1193,7 +1198,7 @@ chaincode生命週期的流程首先會將chaincode部署到通道上，然後�
 14.  Additional resources
 
      -   註1：測試後 query 不需要加 -o 那些有關 orderer 的參數也可以正確執行，而需要提交到帳本的動作，因為觸發到交易則需要
-     -   註2：peerAddresses 參數在測試後看起來只有在 commit 的時候有用
+     -   註2：peerAddresses 參數為指定 endorsing peers
 
      [video](https://youtu.be/qyjDi93URJE)
 
@@ -1826,3 +1831,239 @@ Fabric支持兩種類型的peer狀態資料庫
     ```sh
     ./network.sh down
     ```
+
+## Adding an Org to a Channel(Lab 9)
+
+1.  Setup the Environment
+
+    ```sh
+    cd fabric-samples/test-network
+    ./network.sh down
+    ./network.sh up createChannel
+    
+    ## Script(一步完成)
+    ## cd addOrg3
+    ## ./addOrg3.sh up
+    ## ./addOrg3.sh down
+    ```
+
+2.  Generate the Org3 Crypto Material
+
+    ```SH
+    cd addOrg3
+    ../../bin/cryptogen generate --config=org3-crypto.yaml --output="../organizations"
+    
+    ## org3.json
+    export FABRIC_CFG_PATH=$PWD
+    ../../bin/configtxgen -printOrg Org3MSP > ../organizations/peerOrganizations/org3.example.com/org3.json
+    ```
+
+    組織定義中包含了：Org3的策略定義、Org3的NodeOU定義，以及一個CA根憑證，用於建立組織的信任根、一個TLS根憑證，由gossip協定識別Org3，用於區塊傳播和服務發現。
+
+3.  Bring up Org3 components
+
+    ```sh
+    ## 這個 docker-compose 已設定好 bridge 到 initial network，並啟動peer0.org3和一個CLI(fabric-tools)
+    docker-compose -f docker/docker-compose-org3.yaml up -d
+    ```
+
+4.  Prepare the CLI Environment
+
+    ```sh
+    ## 這個 Org3cli container 有 mount organizations資料夾，所以可以利用環境變數改變角色(admin, Org1, Org2, Org3)
+    docker exec -it Org3cli bash
+    ```
+
+    ```sh
+    export ORDERER_CA=/opt/gopath/src/github.com/hyperledger/fabric/peer/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem
+    export CHANNEL_NAME=mychannel
+    ```
+
+5.  Fetch the Configuration
+
+    ```sh
+    ## Org1
+    export CORE_PEER_LOCALMSPID="Org1MSP"
+    export CORE_PEER_TLS_ROOTCERT_FILE=/opt/gopath/src/github.com/hyperledger/fabric/peer/organizations/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt
+    export CORE_PEER_MSPCONFIGPATH=/opt/gopath/src/github.com/hyperledger/fabric/peer/organizations/peerOrganizations/org1.example.com/users/Admin@org1.example.com/msp
+    export CORE_PEER_ADDRESS=peer0.org1.example.com:7051
+    
+    ## fetch -> config_block.pb
+    peer channel fetch config config_block.pb -o orderer.example.com:7050 -c $CHANNEL_NAME --tls --cafile $ORDERER_CA
+    ```
+
+6.  Convert the Configuration to JSON and Trim It Down
+
+    ```sh
+    configtxlator proto_decode --input config_block.pb --type common.Block --output config_block.json
+    jq '.data.data[0].payload.data.config' config_block.json > config.json
+    ```
+
+7.  Add the Org3 Crypto Material
+
+    ```sh
+    ## merge 2 file(ref.https://stackoverflow.com/questions/19529688/how-to-merge-2-json-objects-from-2-files-using-jq)
+    jq -s '.[0] * {"channel_group":{"groups":{"Application":{"groups": {"Org3MSP":.[1]}}}}}' config.json ./organizations/peerOrganizations/org3.example.com/org3.json > modified_config.json
+    
+    ## config json -> protobuf
+    configtxlator proto_encode --input config.json --type common.Config --output config.pb
+    configtxlator proto_encode --input modified_config.json --type common.Config --output modified_config.pb
+    
+    ## compute update
+    configtxlator compute_update --channel_id $CHANNEL_NAME --original  config.pb --updated modified_config.pb --output org3_update.pb
+    configtxlator proto_decode --input org3_update.pb --type common.ConfigUpdate | jq . > org3_update.json
+    
+    ## 包成 transaction envelope
+    echo '{"payload":{"header":{"channel_header":{"channel_id":"'$CHANNEL_NAME'", "type":2}},"data":{"config_update":'$(cat org3_update.json)'}}}' | jq . > org3_update_in_envelope.json
+    configtxlator proto_encode --input org3_update_in_envelope.json --type common.Envelope --output org3_update_in_envelope.pb
+    ```
+
+8.  Sign and Submit the Config Update
+
+    ```sh
+    ## Org1
+    peer channel signconfigtx -f org3_update_in_envelope.pb
+    ```
+
+    ```sh
+    ## Org2
+    export CORE_PEER_LOCALMSPID="Org2MSP"
+    export CORE_PEER_TLS_ROOTCERT_FILE=/opt/gopath/src/github.com/hyperledger/fabric/peer/organizations/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt
+    export CORE_PEER_MSPCONFIGPATH=/opt/gopath/src/github.com/hyperledger/fabric/peer/organizations/peerOrganizations/org2.example.com/users/Admin@org2.example.com/msp
+    export CORE_PEER_ADDRESS=peer0.org2.example.com:9051
+    
+    ## update(會附帶sign)
+    ## 現實中 org3_update_in_envelope.pb 需要安全傳輸
+    peer channel update -f org3_update_in_envelope.pb -c $CHANNEL_NAME -o orderer.example.com:7050 --tls --cafile $ORDERER_CA
+    ```
+
+9.  Join Org3 to the Channel
+
+    ```sh
+    ## Org3
+    export CORE_PEER_LOCALMSPID="Org3MSP"
+    export CORE_PEER_TLS_ROOTCERT_FILE=/opt/gopath/src/github.com/hyperledger/fabric/peer/organizations/peerOrganizations/org3.example.com/peers/peer0.org3.example.com/tls/ca.crt
+    export CORE_PEER_MSPCONFIGPATH=/opt/gopath/src/github.com/hyperledger/fabric/peer/organizations/peerOrganizations/org3.example.com/users/Admin@org3.example.com/msp
+    export CORE_PEER_ADDRESS=peer0.org3.example.com:11051
+    
+    ## 法一：fetch genesis block
+    peer channel fetch 0 mychannel.block -o orderer.example.com:7050 -c $CHANNEL_NAME --tls --cafile $ORDERER_CA
+    
+    ## 法二：joinbysnapshot
+    ## peer channel joinbysnapshot --snapshotpath <path to snapshot>
+    
+    ## join channel
+    peer channel join -b mychannel.block
+    ```
+
+10.  Configuring Leader Election
+
+     新加入的peer是用genesis block，它不包含通道配置更新資訊。因此，新的peer無法利用gossip，因為他們無法驗證其他peer從自己的組織轉發的區塊，直到他們得到那筆交易(將組織添加到通道配置)。因此，新添加的peer必須具有以下配置(2.2以後預設)，以便它們從排序服務中接收區塊。
+
+     ```sh
+     CORE_PEER_GOSSIP_USELEADERELECTION=false
+     CORE_PEER_GOSSIP_ORGLEADER=true
+     ```
+
+     若想要改為[Dynamic leader election](https://hyperledger-fabric.readthedocs.io/en/latest/gossip.html#dynamic-leader-election)
+
+     ```sh
+     CORE_PEER_GOSSIP_USELEADERELECTION=true
+     CORE_PEER_GOSSIP_ORGLEADER=false
+     ```
+
+11.  Install, define, and invoke chaincode
+
+     通過一系列操作來確認 org3 是 mychannel 的成員之一
+
+     ```sh
+     ## new terminal
+     cd fabric-samples/test-network
+     ./network.sh deployCC -ccn basic -ccp ../asset-transfer-basic/chaincode-go/ -ccl go
+     
+     export PATH=${PWD}/../bin:$PATH
+     export FABRIC_CFG_PATH=$PWD/../config/
+     export CORE_PEER_TLS_ENABLED=true
+     export CORE_PEER_LOCALMSPID="Org3MSP"
+     export CORE_PEER_TLS_ROOTCERT_FILE=${PWD}/organizations/peerOrganizations/org3.example.com/peers/peer0.org3.example.com/tls/ca.crt
+     export CORE_PEER_MSPCONFIGPATH=${PWD}/organizations/peerOrganizations/org3.example.com/users/Admin@org3.example.com/msp
+     export CORE_PEER_ADDRESS=localhost:11051
+     
+     ## Approvals: [Org1MSP: true, Org2MSP: true, Org3MSP: false]
+     peer lifecycle chaincode querycommitted --channelID mychannel --name basic
+     
+     
+     ## package -> install -> approveformyorg
+     peer lifecycle chaincode package basic.tar.gz --path ../asset-transfer-basic/chaincode-go/ --lang golang --label basic_1
+     peer lifecycle chaincode install basic.tar.gz
+     peer lifecycle chaincode queryinstalled
+     export CC_PACKAGE_ID=basic_1:9820659c595e662a849033ca23b4424e87a126e8f40b5f81ace59820b81fe8e7
+     peer lifecycle chaincode approveformyorg -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com --tls --cafile ${PWD}/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem --channelID mychannel --name basic --version 1.0 --package-id $CC_PACKAGE_ID --sequence 1
+     
+     ## 看approve結果
+     peer lifecycle chaincode querycommitted --channelID mychannel --name basic
+     
+     ## invoke
+     peer chaincode invoke -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com --tls --cafile ${PWD}/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem -C mychannel -n basic --peerAddresses localhost:9051 --tlsRootCertFiles ${PWD}/organizations/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt --peerAddresses localhost:11051 --tlsRootCertFiles ${PWD}/organizations/peerOrganizations/org3.example.com/peers/peer0.org3.example.com/tls/ca.crt -c '{"function":"InitLedger","Args":[]}'
+     
+     ## query
+     peer chaincode query -C mychannel -n basic -c '{"Args":["GetAllAssets"]}'
+     ```
+
+12.  Updating the Channel Config to include an Org3 Anchor Peer
+
+     類似 lab8-7 步驟，新增加的組織Org3也應該在通道配置中定義他們的anchor peers，這樣任何來自其他組織的peer都可以直接發現Org3的peer([ref.gossip](https://hyperledger-fabric.readthedocs.io/en/latest/gossip.html))
+
+     ```sh
+     docker exec -it Org3cli bash
+     
+     export ORDERER_CA=/opt/gopath/src/github.com/hyperledger/fabric/peer/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem
+     export CHANNEL_NAME=mychannel
+     
+     ## fetch recent config_block -> 轉換 -> add anchorpeer to config_block
+     peer channel fetch config config_block.pb -o orderer.example.com:7050 -c $CHANNEL_NAME --tls --cafile $ORDERER_CA
+     
+     configtxlator proto_decode --input config_block.pb --type common.Block --output config_block.json
+     
+     jq .data.data[0].payload.data.config config_block.json > config.json
+     jq '.channel_group.groups.Application.groups.Org3MSP.values += {"AnchorPeers":{"mod_policy": "Admins","value":{"anchor_peers": [{"host": "peer0.org3.example.com","port": 11051}]},"version": "0"}}' config.json > modified_anchor_config.json
+     
+     ## 新舊config_block轉換成pb -> compute update -> 包成 transaction envelope
+     configtxlator proto_encode --input config.json --type common.Config --output config.pb
+     configtxlator proto_encode --input modified_anchor_config.json --type common.Config --output modified_anchor_config.pb
+     
+     configtxlator compute_update --channel_id $CHANNEL_NAME --original config.pb --updated modified_anchor_config.pb --output anchor_update.pb
+     configtxlator proto_decode --input anchor_update.pb --type common.ConfigUpdate | jq . > anchor_update.json
+     
+     echo '{"payload":{"header":{"channel_header":{"channel_id":"'$CHANNEL_NAME'", "type":2}},"data":{"config_update":'$(cat anchor_update.json)'}}}' | jq . > anchor_update_in_envelope.json
+     configtxlator proto_encode --input anchor_update_in_envelope.json --type common.Envelope --output anchor_update_in_envelope.pb
+     
+     
+     ## Org3
+     export CORE_PEER_LOCALMSPID="Org3MSP"
+     export CORE_PEER_TLS_ROOTCERT_FILE=/opt/gopath/src/github.com/hyperledger/fabric/peer/organizations/peerOrganizations/org3.example.com/peers/peer0.org3.example.com/tls/ca.crt
+     export CORE_PEER_MSPCONFIGPATH=/opt/gopath/src/github.com/hyperledger/fabric/peer/organizations/peerOrganizations/org3.example.com/users/Admin@org3.example.com/msp
+     export CORE_PEER_ADDRESS=peer0.org3.example.com:11051
+     
+     ## channel update
+     peer channel update -f anchor_update_in_envelope.pb -c $CHANNEL_NAME -o orderer.example.com:7050 --tls --cafile $ORDERER_CA
+     ```
+
+     ```sh
+     docker logs -f peer0.org1.example.com
+     ```
+
+     ```log
+     [gossip.gossip] learnAnchorPeers -> INFO 088 Learning about the configured anchor peers of Org2MSP for channel mychannel: [{peer0.org2.example.com 9051}]
+     [gossip.gossip] learnAnchorPeers -> INFO 089 Learning about the configured anchor peers of Org3MSP for channel mychannel: [{peer0.org3.example.com 11051}]
+     [gossip.gossip] learnAnchorPeers -> INFO 08a Learning about the configured anchor peers of Org1MSP for channel mychannel: [{peer0.org1.example.com 7051}]
+     ```
+
+13.  Clean up
+
+     ```sh
+     cd addOrg3
+     ./addOrg3.sh down
+     ```
+
+     
