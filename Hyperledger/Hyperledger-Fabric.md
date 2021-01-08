@@ -1623,4 +1623,206 @@ Fabric支持兩種類型的peer狀態資料庫
     ./network.sh down
     ```
 
+## Creating a channel(Lab 8)
+
+為了在 Hyperledger Fabric 網路上建立和轉移資產，一個組織需要加入一個 channel。channel是特定組織之間的私人通信層，網路的其他成員是看不到的。每個channel由一個獨立的 ledger 組成，只能由 channel 成員進行讀寫，channel 成員允許將其 peer 加入到 channel 中，並從 ordering service 中接收新的交易區塊。peer、node和 CA構成了網路的基礎設施，而 channel 則是各組織相互連接和互動的過程。
+
+-   Create a new channel
+
+    channel 是通過建立一個 channel creation TX 並將該交易提交給 ordering service 來建立的。 channel creation TX 指定了channel 的初始配置，並被 ordering service 用來寫成 channel genesis block。雖然可以手動建立channel creation TX，但使用 configtxgen 工具更方便。該工具的工作原理是讀取一個定義了你的channel配置(configtx.yaml)，然後將相關資訊寫入channel creation TX。
+
+1.  Setting up the configtxgen tool
+
+    ```sh
+    cd fabric-samples/test-network
+    export PATH=${PWD}/../bin:$PATH
+    export FABRIC_CFG_PATH=${PWD}/configtx
+    configtxgen --help
+    ```
+
+2.  The configtx.yaml file(`configtx/configtx.yaml`)
+
+    -   Organizations: 通道配置中包含的最重要資訊是通道成員的組織。每個組織由一個 MSP ID 和一個 channel MSP 識別。channel MSP 會儲存在通道配置中，包含用於識別組織的節點、應用程式和管理員的憑證。configtx.yaml 文件的 Organizations 部分用於為通道的每個成員建立 channel MSP 和相應的 MSP ID。測試網路使用的 configtx.yaml 文件包含三個組織。兩個組織是對等節點組織，Org1和Org2，可以添加到應用通道中。一個組織 OrdererOrg 是排序服務的管理員。因為使用不同的證書頒發機構來部署對等節點和排序節點是一種最佳的做法，所以組織通常被稱為對等組織或排序組織，即使它們實際上是由同一家公司管理的。
+    -   Capabilities: Fabric 通道可以由運行不同版本 Hyperledger Fabric 的排序節點和對等節點加入。通道功能允許運行不同 Fabric 二進制的組織通過僅啓用某些功能來參與同一通道。例如，運行Fabric v1.4的組織和運行Fabric v2.x的組織可以加入同一個通道，只要通道能力級別設置為V1_4_X或以下。通道成員都不能使用Fabric v2.0中引入的功能。
+        -   Application: 管理對等節點使用的功能，如Fabric鏈碼生命週期，並設置加入通道的對等節點可以運行的Fabric二進制文件的最低版本。
+        -   Orderer: 管理排序節點所使用的功能，如Raft共識，並設置屬於通道consenter set的排序節點可以運行的Fabric二進制文件的最小版本。
+        -   Channel: 設置了對等節點和排序節點可以運行的Fabric的最小版本。
+    -   Application: 定義了管理對等組織如何與應用通道交互的策略。這些策略規定了需要批准鏈碼定義或簽署更新通道配置請求的對等組織的數量。這些策略還用於限制對通道資源的存取，例如向通道帳本寫入或查詢通道事件的能力。
+    -   Orderer: 定義哪些排序節點將形成網路的排序服務(consenter set)，以及他們將使用的共識方法來同意交易的共同順序，以及將成為排序服務管理員的組織。
+    -   Channel: 定義了如何與channel交互以及哪些組織需要批准channel更新的策略。為通道配置最高級別的策略。對於應用通道，這些策略管理雜湊演算法、用於產生新區塊的資料雜湊結構以及通道能力級別。在系統通道中，這些策略還管理對等組織聯盟的建立或刪除。
+    -   Profiles: 引用文件其他部分的資訊來建立一個通道配置。這些配置文件用於
+        -   建立orderer system channel(系統通道)的gensis block (`TwoOrgsOrdererGenesis`)，系統通道定義了排序服務的節點和作為排序服務管理員的一組組織。系統通道還包括一些屬於區塊鏈聯盟的對等組織。聯盟每個成員的通道MSP都包含在系統通道中，允許他們建立新的應用通道，並將聯盟成員添加到新通道中。
+        -   建立peer 使用的 application channel(應用通道)(``TwoOrgsChannel`)，系統通道被排序服務作為建立應用通道的模板。在系統通道中定義的排序服務節點成為新通道的默認consenter set，而排序服務的管理員則成為通道的排序員管理員。通道成員的通道MSP從系統通道轉移到新通道中。通道建立後，可以通過更新通道配置從通道中添加或刪除排序節點。
+
+3.  Channel policies(`configtx/configtx.yaml`)
+
+    通道是組織間交流的一種私密方式。因此，對通道配置的大多數更改都需要得到通道的其他成員的同意。Channel policies是由 `configtx.yaml `的不同部分决定的([了解policy](https://hyperledger-fabric.readthedocs.io/en/latest/policies.html)、[Channel policies](https://hyperledger-fabric.readthedocs.io/en/latest/create_channel/channel_policies.html))
+
+    -   Signature policies(Organizations/Policies): 當一個提案提交給對等節點，或者一個交易提交給排序節點時，節點會讀取附加到交易的簽名，並根據通道配置中定義的簽名策略來評估它們。
+    -   ImplicitMeta Policies:(Application/Policies & Orderer/Policies & Channel/Policies) 隱式策略，每個組織的簽名策略將由ImplicitMeta策略在較高級別的通道配置中評估。e.g.可以在通道級別設置隱式規則`MAJORITY Admins`，同時允許每通道道成員選擇對其組織進行簽名所需的身份`Admins`。優點：在從通道中添加或刪除組織時不需要更新它們；缺點：它們不能顯式讀取通道成員使用的簽名策略。
+    -   Channel modification policies
+    -   Channel policies and Access Control Lists
+
+4.  Start the network
+
+    ```sh
+    ./network.sh down
+    ./network.sh up
+    ```
+
+4.  Creating an application channel
+
+    -   `-profile` : 使用在`configtx.yaml`定義的TwoOrgsChannel(ref.SampleConsortium)
+    -   `-channelID`: channel 名稱
+
+    ```sh
+    configtxgen -profile TwoOrgsChannel -outputCreateChannelTx ./channel-artifacts/channel1.tx -channelID channel1
+    export FABRIC_CFG_PATH=$PWD/../config/
     
+    ## Org1
+    export CORE_PEER_TLS_ENABLED=true
+    export CORE_PEER_LOCALMSPID="Org1MSP"
+    export CORE_PEER_TLS_ROOTCERT_FILE=${PWD}/organizations/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt
+    export CORE_PEER_MSPCONFIGPATH=${PWD}/organizations/peerOrganizations/org1.example.com/users/Admin@org1.example.com/msp
+    export CORE_PEER_ADDRESS=localhost:7051
+    
+    ## create channel 產生 gensis block
+    peer channel create -o localhost:7050  --ordererTLSHostnameOverride orderer.example.com -c channel1 -f ./channel-artifacts/channel1.tx --outputBlock ./channel-artifacts/channel1.block --tls --cafile ${PWD}/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem
+    ```
+
+5.  Join peers to the channel
+
+    -   Org1 使用 genesis block 加入 channel
+
+    ```sh
+    ## 加入
+    peer channel join -b ./channel-artifacts/channel1.block
+    
+    ## 確認
+    peer channel getinfo -c channel1
+    ```
+
+    -   Org2 使用 fetch 從 oredering service 抓 gensis block
+
+    ```sh
+    ## Org2
+    export CORE_PEER_TLS_ENABLED=true
+    export CORE_PEER_LOCALMSPID="Org2MSP"
+    export CORE_PEER_TLS_ROOTCERT_FILE=${PWD}/organizations/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt
+    export CORE_PEER_MSPCONFIGPATH=${PWD}/organizations/peerOrganizations/org2.example.com/users/Admin@org2.example.com/msp
+    export CORE_PEER_ADDRESS=localhost:9051
+    
+    ## fetch gensis block
+    peer channel fetch 0 ./channel-artifacts/channel_org2.block -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com -c channel1 --tls --cafile ${PWD}/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem
+    
+    ## 加入
+    peer channel join -b ./channel-artifacts/channel_org2.block
+    
+    ## 確認
+    peer channel getinfo -c channel1
+    ```
+
+6.  Set anchor peers
+
+    當一個組織將其 peer 加入 channel 後，他們應該至少選擇一個peer成為 anchor peer，為了private data 和 service discovery...等功能。每個組織應該在一個channel上設置多個anchor peer 實現冗餘。ref.[Gossip data dissemination protocol](https://hyperledger-fabric.readthedocs.io/en/release-2.2/gossip.html)
+
+    通道配置中包含了每個組織的 anchor peer 的終端資訊。每個channel成員可以通過更新channel來指定自己的anchor peer。接下來將使用 configtxlator 工具更新通道配置，為Org1和Org2選擇一個anchor peer。
+
+    !! 記得下載 jq 
+
+    ```sh
+    ## Org1
+    export FABRIC_CFG_PATH=$PWD/../config/
+    export CORE_PEER_TLS_ENABLED=true
+    export CORE_PEER_LOCALMSPID="Org1MSP"
+    export CORE_PEER_TLS_ROOTCERT_FILE=${PWD}/organizations/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt
+    export CORE_PEER_MSPCONFIGPATH=${PWD}/organizations/peerOrganizations/org1.example.com/users/Admin@org1.example.com/msp
+    export CORE_PEER_ADDRESS=localhost:7051
+    
+    ## fetch most recent configuration block
+    peer channel fetch config channel-artifacts/config_block.pb -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com -c channel1 --tls --cafile ${PWD}/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem
+    
+    cd channel-artifacts
+    
+    ## protobuf 轉為 json
+    configtxlator proto_decode --input config_block.pb --type common.Block --output config_block.json
+    jq '.data.data[0].payload.data.config' config_block.json > config.json
+    
+    ## 新增 anchor peer 到 Org1
+    cp config.json config_copy.json
+    jq '.channel_group.groups.Application.groups.Org1MSP.values += {"AnchorPeers":{"mod_policy": "Admins","value":{"anchor_peers": [{"host": "peer0.org1.example.com","port": 7051}]},"version": "0"}}' config_copy.json > modified_config.json
+    
+    ## original config json -> protobuf
+    configtxlator proto_encode --input config.json --type common.Config --output config.pb
+    ## modified config json -> protobuf
+    configtxlator proto_encode --input modified_config.json --type common.Config --output modified_config.pb
+    ## compute update
+    configtxlator compute_update --channel_id channel1 --original config.pb --updated modified_config.pb --output config_update.pb
+    configtxlator proto_decode --input config_update.pb --type common.ConfigUpdate --output config_update.json
+    
+    ## 包成 transaction envelope
+    echo '{"payload":{"header":{"channel_header":{"channel_id":"channel1", "type":2}},"data":{"config_update":'$(cat config_update.json)'}}}' | jq . > config_update_in_envelope.json
+    configtxlator proto_encode --input config_update_in_envelope.json --type common.Envelope --output config_update_in_envelope.pb
+    cd ..
+    
+    ## update channel
+    peer channel update -f channel-artifacts/config_update_in_envelope.pb -c channel1 -o localhost:7050  --ordererTLSHostnameOverride orderer.example.com --tls --cafile ${PWD}/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem
+    ```
+
+    ```sh
+    ## Org2
+    export CORE_PEER_TLS_ENABLED=true
+    export CORE_PEER_LOCALMSPID="Org2MSP"
+    export CORE_PEER_TLS_ROOTCERT_FILE=${PWD}/organizations/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt
+    export CORE_PEER_MSPCONFIGPATH=${PWD}/organizations/peerOrganizations/org2.example.com/users/Admin@org2.example.com/msp
+    export CORE_PEER_ADDRESS=localhost:9051
+    
+    ## fetch most recent configuration block
+    peer channel fetch config channel-artifacts/config_block.pb -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com -c channel1 --tls --cafile ${PWD}/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem
+    
+    cd channel-artifacts
+    
+    ## protobuf 轉為 json
+    configtxlator proto_decode --input config_block.pb --type common.Block --output config_block.json
+    jq '.data.data[0].payload.data.config' config_block.json > config.json
+    cp config.json config_copy.json
+    
+    ## 新增 anchor peer 到 Org2
+    jq '.channel_group.groups.Application.groups.Org2MSP.values += {"AnchorPeers":{"mod_policy": "Admins","value":{"anchor_peers": [{"host": "peer0.org2.example.com","port": 9051}]},"version": "0"}}' config_copy.json > modified_config.json
+    
+    ## original config json -> protobuf
+    configtxlator proto_encode --input config.json --type common.Config --output config.pb
+    ## modified config json -> protobuf
+    configtxlator proto_encode --input modified_config.json --type common.Config --output modified_config.pb
+    ## compute update
+    configtxlator compute_update --channel_id channel1 --original config.pb --updated modified_config.pb --output config_update.pb
+    configtxlator proto_decode --input config_update.pb --type common.ConfigUpdate --output config_update.json
+    
+    ## 包成 transaction envelope
+    echo '{"payload":{"header":{"channel_header":{"channel_id":"channel1", "type":2}},"data":{"config_update":'$(cat config_update.json)'}}}' | jq . > config_update_in_envelope.json
+    configtxlator proto_encode --input config_update_in_envelope.json --type common.Envelope --output config_update_in_envelope.pb
+    cd ..
+    
+    ## update channel
+    peer channel update -f channel-artifacts/config_update_in_envelope.pb -c channel1 -o localhost:7050  --ordererTLSHostnameOverride orderer.example.com --tls --cafile ${PWD}/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem
+    
+     
+    ## 確認結果(block height 應該要=3)
+    peer channel getinfo -c channel1
+    ```
+
+7.  Deploy a chaincode to the new channel
+
+    ```sh
+    ## deploy basic chaincode on channel 1
+    ./network.sh deployCC -ccn basic -ccp ../asset-transfer-basic/chaincode-go/ -ccl go -c channel1 -cci InitLedger
+    
+    # query
+    peer chaincode query -C channel1 -n basic -c '{"Args":["getAllAssets"]}'
+    ```
+
+8.  Clean up
+
+    ```sh
+    ./network.sh down
+    ```
