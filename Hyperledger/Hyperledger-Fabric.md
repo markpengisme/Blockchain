@@ -2066,4 +2066,386 @@ Fabric支持兩種類型的peer狀態資料庫
      ./addOrg3.sh down
      ```
 
-     
+## Updating a channel configuration
+
+像許多複雜的系統一樣，Hyperledger Fabric 網路由結構和一些相關的流程組成。識別區塊鏈網路結構的資訊和管理結構如何互動的過程都包含在通道配置中。由於配置是包含在區塊中的，更新通道配置的過程被稱為配置更新交易。在正式環境中，這些配置更新交易通常在帶外討論後會由單個通道管理員提出，就像通道的初始配置會由通道的初始成員在帶外決定一樣。
+
+-   結構：包含用戶（如管理員）、組織、對等節點、排序節點、CA、智能合約和應用。
+
+-   流程：這些結構之間的互動方式。其中最重要的是Policy，即規定哪些用戶可以做什麼，在什麼條件下做什麼的規則。
+
+More about these parameters
+
+```json
+{
+  "channel_group": {
+    "groups": {
+      "Application": {
+        "groups": {
+          "Org1MSP": {
+          },
+          "Org2MSP": {
+          }
+        },
+        "mod_policy": "Admins",
+        "policies": {
+          "Admins": {
+          },
+          "Endorsement": {
+          },
+          "LifecycleEndorsement": {
+          },
+          "Readers": {
+          },
+          "Writers": {
+          }
+        },
+        "values": {
+          "Capabilities": {
+          }
+        },
+        "version": "1"
+      },
+      "Orderer": {
+        "groups": {
+          "OrdererOrg": {
+          }
+        },
+        "mod_policy": "Admins",
+        "policies": {
+          "Admins": {
+          },
+          "BlockValidation": {
+          },
+          "Readers": {
+          },
+          "Writers": {
+          }
+        },
+        "values": {
+          "BatchSize": {
+          },
+          "BatchTimeout": {
+          },
+          "Capabilities": {
+          },
+          "ChannelRestrictions": {
+          },
+          "ConsensusType": {
+          }
+        },
+        "version": "0"
+      }
+    },
+    "mod_policy": "Admins",
+    "policies": {
+      "Admins": {
+      },
+      "Readers": {
+      },
+      "Writers": {
+      }
+    },
+    "values": {
+      "BlockDataHashingStructure": {
+      },
+      "Capabilities": {
+      },
+      "Consortium": {
+      },
+      "HashingAlgorithm": {
+      },
+      "OrdererAddresses": {
+      }
+    },
+    "version": "0"
+  },
+  "sequence": "3"
+}
+```
+
+-   Policies:  策略不僅僅是一個配置值，它們定義了在什麼情況下可以更改所有參數。 [Policies](https://hyperledger-fabric.readthedocs.io/en/latest/policies/policies.html)
+-   Capabilities: 確保網路和通道以同樣的方式處理事情，為通道配置更新和鏈碼呼叫等事情建立確定性的結果。 [Capabilities](https://hyperledger-fabric.readthedocs.io/en/latest/capabilities_concept.html)
+-   channel/application: 管理應用程式通道特有的配置參數
+    -   Add orgs to a channel: 要新增 orgs 要把他加入這裡(Channel/Application/groups)
+    -   Organization-related parameters: 任何特定於組織的參數都可以被更改
+-   channel/orderer: 管理排序服務或排序者系統通道特有的配置參數
+    -   Batch size
+    -   Batch timeout
+    -   Block validation
+    -   Consensus type
+    -   Raft ordering service parameters
+-   channel: 管控對等組織和排序服務組織都需要同意的配置參數
+    -   Orderer addresses
+    -   Hashing structure
+    -   Hashing algorithm
+
+---
+
+Editing a config(參考lab8, lab9)
+
+1.  Pull and translate the config
+2.  Modify the config
+3.  Re-encode and submit the config
+4.  Get the Necessary Signatures
+
+## Writing Your First Chaincode(Lab 10)
+
+Chaincode是一個程式，用Go、Node.js或Java編寫，實現了一個規定的介面。Chaincode運行在一個獨立於對等節點的進程中，通過應用程式提交的交易來初始化和管理帳本狀態。
+
+請注意，當使用合約api時，每個被調用的鏈碼函數都會被傳遞一個交易上下文 "ctx"，你可以從這個上下文中獲得鏈碼存根(GetStub())，其中有存取分類帳的函數(例如GetState())，並提出更新分類帳的請求(例如PutState())。
+
+1.  Choosing a Location for the Code
+
+    ```sh
+    cd fabric-samples
+    mkdir atcc && cd atcc
+    go mod init atcc
+    touch atcc.go
+    ```
+
+2.  Housekeeping
+
+    ```go
+    package main
+    
+    import (
+      "fmt"
+      "log"
+      "github.com/hyperledger/fabric-contract-api-go/contractapi"
+    )
+    
+    // SmartContract provides functions for managing an Asset
+    type SmartContract struct {
+      contractapi.Contract
+    }
+    ```
+
+    ```go
+    // Asset describes basic details of what makes up a simple asset
+    type Asset struct {
+      ID             string `json:"ID"`
+      Color          string `json:"color"`
+      Size           int    `json:"size"`
+      Owner          string `json:"owner"`
+      AppraisedValue int    `json:"appraisedValue"`
+    }
+    ```
+
+3.  Initializing the Chaincode
+
+    ```go
+    // InitLedger adds a base set of assets to the ledger
+    func (s *SmartContract) InitLedger(ctx contractapi.TransactionContextInterface) error {
+      assets := []Asset{
+        {ID: "asset1", Color: "blue", Size: 5, Owner: "Tomoko", AppraisedValue: 300},
+        {ID: "asset2", Color: "red", Size: 5, Owner: "Brad", AppraisedValue: 400},
+        {ID: "asset3", Color: "green", Size: 10, Owner: "Jin Soo", AppraisedValue: 500},
+        {ID: "asset4", Color: "yellow", Size: 10, Owner: "Max", AppraisedValue: 600},
+        {ID: "asset5", Color: "black", Size: 15, Owner: "Adriana", AppraisedValue: 700},
+        {ID: "asset6", Color: "white", Size: 15, Owner: "Michel", AppraisedValue: 800},
+      }
+    
+      for _, asset := range assets {
+        assetJSON, err := json.Marshal(asset)
+        if err != nil {
+            return err
+        }
+    
+        err = ctx.GetStub().PutState(asset.ID, assetJSON)
+        if err != nil {
+            return fmt.Errorf("failed to put to world state. %v", err)
+        }
+      }
+    
+      return nil
+    }
+    ```
+
+4.  CRUD
+
+    ```go
+    // CreateAsset issues a new asset to the world state with given details.
+    func (s *SmartContract) CreateAsset(ctx contractapi.TransactionContextInterface, id string, color string, size int, owner string, appraisedValue int) error {
+      exists, err := s.AssetExists(ctx, id)
+      if err != nil {
+        return err
+      }
+      if exists {
+        return fmt.Errorf("the asset %s already exists", id)
+      }
+    
+      asset := Asset{
+        ID:             id,
+        Color:          color,
+        Size:           size,
+        Owner:          owner,
+        AppraisedValue: appraisedValue,
+      }
+      assetJSON, err := json.Marshal(asset)
+      if err != nil {
+        return err
+      }
+    
+      return ctx.GetStub().PutState(id, assetJSON)
+    }
+    ```
+
+    ```go
+    // ReadAsset returns the asset stored in the world state with given id.
+    func (s *SmartContract) ReadAsset(ctx contractapi.TransactionContextInterface, id string) (*Asset, error) {
+      assetJSON, err := ctx.GetStub().GetState(id)
+      if err != nil {
+        return nil, fmt.Errorf("failed to read from world state: %v", err)
+      }
+      if assetJSON == nil {
+        return nil, fmt.Errorf("the asset %s does not exist", id)
+      }
+    
+      var asset Asset
+      err = json.Unmarshal(assetJSON, &asset)
+      if err != nil {
+        return nil, err
+      }
+    
+      return &asset, nil
+    }
+    ```
+
+    ```go
+    // UpdateAsset updates an existing asset in the world state with provided parameters.
+    func (s *SmartContract) UpdateAsset(ctx contractapi.TransactionContextInterface, id string, color string, size int, owner string, appraisedValue int) error {
+      exists, err := s.AssetExists(ctx, id)
+      if err != nil {
+        return err
+      }
+      if !exists {
+        return fmt.Errorf("the asset %s does not exist", id)
+      }
+    
+      // overwriting original asset with new asset
+      asset := Asset{
+        ID:             id,
+        Color:          color,
+        Size:           size,
+        Owner:          owner,
+        AppraisedValue: appraisedValue,
+      }
+      assetJSON, err := json.Marshal(asset)
+      if err != nil {
+        return err
+      }
+    
+      return ctx.GetStub().PutState(id, assetJSON)
+    }
+    ```
+
+    ```go
+    // DeleteAsset deletes an given asset from the world state.
+    func (s *SmartContract) DeleteAsset(ctx contractapi.TransactionContextInterface, id string) error {
+      exists, err := s.AssetExists(ctx, id)
+      if err != nil {
+        return err
+      }
+      if !exists {
+        return fmt.Errorf("the asset %s does not exist", id)
+      }
+    
+      return ctx.GetStub().DelState(id)
+    }
+    
+    ```
+
+5.  AssetExists & TransferAsset
+
+    ```go
+    // AssetExists returns true when asset with given ID exists in world state
+    func (s *SmartContract) AssetExists(ctx contractapi.TransactionContextInterface, id string) (bool, error) {
+      assetJSON, err := ctx.GetStub().GetState(id)
+      if err != nil {
+        return false, fmt.Errorf("failed to read from world state: %v", err)
+      }
+    
+      return assetJSON != nil, nil
+    }
+    ```
+
+    ```go
+    // TransferAsset updates the owner field of asset with given id in world state.
+    func (s *SmartContract) TransferAsset(ctx contractapi.TransactionContextInterface, id string, newOwner string) error {
+      asset, err := s.ReadAsset(ctx, id)
+      if err != nil {
+        return err
+      }
+    
+      asset.Owner = newOwner
+      assetJSON, err := json.Marshal(asset)
+      if err != nil {
+        return err
+      }
+    
+      return ctx.GetStub().PutState(id, assetJSON)
+    }
+    ```
+
+    ```go
+    // GetAllAssets returns all assets found in world state
+    func (s *SmartContract) GetAllAssets(ctx contractapi.TransactionContextInterface) ([]*Asset, error) {
+      // range query with empty string for startKey and endKey does an
+      // open-ended query of all assets in the chaincode namespace.
+      resultsIterator, err := ctx.GetStub().GetStateByRange("", "")
+      if err != nil {
+        return nil, err
+      }
+      defer resultsIterator.Close()
+    
+      var assets []*Asset
+      for resultsIterator.HasNext() {
+        queryResponse, err := resultsIterator.Next()
+        if err != nil {
+          return nil, err
+        }
+    
+        var asset Asset
+        err = json.Unmarshal(queryResponse.Value, &asset)
+        if err != nil {
+          return nil, err
+        }
+        assets = append(assets, &asset)
+      }
+    
+      return assets, nil
+    }
+    ```
+
+6.  Put it all together
+
+    ```sh
+    func main() {
+      assetChaincode, err := contractapi.NewChaincode(&SmartContract{})
+      if err != nil {
+        log.Panicf("Error creating asset-transfer-basic chaincode: %v", err)
+      }
+    
+      if err := assetChaincode.Start(); err != nil {
+        log.Panicf("Error starting asset-transfer-basic chaincode: %v", err)
+      }
+    }
+    ```
+
+7.  Chaincode access control
+
+    Chaincode可以通過`ctx.GetStub().GetCreator()`利用憑證進行存取控制決策。此外，Fabric Contract API還提供了擴展API，以檢索該提交者資訊，無論是基於客戶身份本身，還是基於org身份，還是基於客戶身份屬性，進而做出存取控制決策。
+
+8.  Managing external dependencies for chaincode written in Go
+
+    因為chaincode依賴於不屬於標準函式庫的go package，這些套件的原始碼必須在你的chaincode package安裝到對等節點時被包含在內。最簡單的方式就是 go vendor
+
+    ```
+    go mod tidy
+    go mod vendor
+    ```
+
+    一旦依賴關係被放置在你的鏈碼目錄中，``peer chaincode package` and `peer chaincode install`將會包含依賴關係相關的程式碼。
+
+    
