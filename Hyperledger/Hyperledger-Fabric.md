@@ -80,17 +80,12 @@ peer chaincode invoke -o localhost:7050 --ordererTLSHostnameOverride orderer.exa
         export CORE_PEER_TLS_ROOTCERT_FILE=${PWD}/organizations/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt
         export CORE_PEER_ADDRESS=localhost:9051
         ```
-    ```
     
-    ```
-    
-6. Read Assest
-   
+    6. Read Assest
+
         ```sh
         peer chaincode query -C mychannel -n basic -c '{"Args":["ReadAsset","asset6"]}'
-    ```
-    
-    ```
+        ```
     
 6. Bring down the network
 
@@ -1033,7 +1028,7 @@ chaincode生命週期的流程首先會將chaincode部署到通道上，然後�
     export CORE_PEER_MSPCONFIGPATH=${PWD}/organizations/peerOrganizations/org1.example.com/users/owner@org1.example.com/msp
     export CORE_PEER_ADDRESS=localhost:7051
     
-    ## CreateAssest
+    ## CreateAsset
     export ASSET_PROPERTIES=$(echo -n "{\"objectType\":\"asset\",\"assetID\":\"asset1\",\"color\":\"green\",\"size\":20,\"appraisedValue\":100}" | base64 | tr -d \\n)
     peer chaincode invoke -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com --tls --cafile ${PWD}/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem -C mychannel -n private -c '{"function":"CreateAsset","Args":[]}' --transient "{\"asset_properties\":\"$ASSET_PROPERTIES\"}"
     ```
@@ -1523,7 +1518,7 @@ Fabric支持兩種類型的peer狀態資料庫
     export CORE_PEER_MSPCONFIGPATH=${PWD}/organizations/peerOrganizations/org1.example.com/users/Admin@org1.example.com/msp
     export CORE_PEER_ADDRESS=localhost:7051
     
-    ## CreateAssest
+    ## CreateAsset
     peer chaincode invoke -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com --tls --cafile ${PWD}/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem -C mychannel -n ledger -c '{"Args":["CreateAsset","asset1","blue","5","tom","35"]}'
     
     ## Rich Query with index name explicitly specified:
@@ -2448,4 +2443,135 @@ Chaincode是一個程式，用Go、Node.js或Java編寫，實現了一個規定�
 
     一旦依賴關係被放置在你的鏈碼目錄中，``peer chaincode package` and `peer chaincode install`將會包含依賴關係相關的程式碼。
 
-    
+## Running chaincode in development mode(Lab 11)
+
+在智能合約開發過程中，開發者需要一種方法來快速迭代測試鏈碼包，而不必為每次修改運行鏈碼生命週期命令。這允許快速部署、除錯和更新，而無需每次更新時重新下對等節點生命週期鏈碼命令。
+
+```sh
+## build the binaries for orderer, peer, and configtxgen:
+cd fabric
+make orderer peer configtxgen
+```
+
+```sh
+export PATH=$(pwd)/build/bin:$PATH
+export FABRIC_CFG_PATH=$(pwd)/sampleconfig
+
+## genesisblock
+configtxgen -profile SampleDevModeSolo -channelID syschannel -outputBlock genesisblock -configPath $FABRIC_CFG_PATH -outputBlock $(pwd)/sampleconfig/genesisblock
+```
+
+```sh
+## Start the orderer（SampleDevModeSolo)
+#### if panic: Error creating dir if missing: error while creating dir: /var/hyperledger/production/orderer/index: mkdir /var/hyperledger: permission denied
+# sudo mkdir -p /var/hyperledger/production/orderer/index
+# sudo chown -R $(whoami) /var/hyperledger
+####
+ORDERER_GENERAL_GENESISPROFILE=SampleDevModeSolo orderer
+```
+
+```sh
+## Start the peer in DevMode
+## new window
+export PATH=$(pwd)/build/bin:$PATH
+export FABRIC_CFG_PATH=$(pwd)/sampleconfig
+FABRIC_LOGGING_SPEC=chaincode=debug CORE_PEER_CHAINCODELISTENADDRESS=0.0.0.0:7052 peer node start --peer-chaincodedev=true
+```
+
+```sh
+## Create channel and join peer
+## new window
+
+#### if Error: failed to initialize operations subsystem: listen tcp 127.0.0.1:9443: bind: address already in use
+# change ./sampleconfig/core.yaml
+# operations:
+#	host and port for the operations server
+#	listenAddress: 127.0.0.1:9444
+#### ref.https://stackoverflow.com/questions/65387254/port-error-when-setting-up-dev-mode-of-hyperledger-fabric
+export PATH=$(pwd)/build/bin:$PATH
+export FABRIC_CFG_PATH=$(pwd)/sampleconfig
+configtxgen -channelID ch1 -outputCreateChannelTx ch1.tx -profile SampleSingleMSPChannel -configPath $FABRIC_CFG_PATH
+peer channel create -o 127.0.0.1:7050 -c ch1 -f ch1.tx
+```
+
+```sh
+## Build the chaincode
+go build -o simpleChaincode ./integration/chaincode/simple/cmd
+```
+
+>   When `DevMode` is enabled on the peer, the `CORE_CHAINCODE_ID_NAME` environment variable must be set to `<CHAINCODE_NAME>`:`<CHAINCODE_VERSION>` otherwise, the peer is unable to find the chaincode. 
+
+```sh
+## Start the chaincode(從 peer log 確認)
+CORE_CHAINCODE_LOGLEVEL=debug CORE_PEER_TLS_ENABLED=false CORE_CHAINCODE_ID_NAME=mycc:1.0 ./simpleChaincode -peer.address 127.0.0.1:7052
+```
+
+```sh
+## Approve and commit the chaincode definition
+## new window
+
+export PATH=$(pwd)/build/bin:$PATH
+export FABRIC_CFG_PATH=$(pwd)/sampleconfig
+
+peer lifecycle chaincode approveformyorg  -o 127.0.0.1:7050 --channelID ch1 --name atcc --version 1.0 --sequence 1 --init-required --signature-policy "OR ('SampleOrg.member')"  --package-id atcc:1.0
+peer lifecycle chaincode checkcommitreadiness -o 127.0.0.1:7050 --channelID ch1 --name mycc --version 1.0 --sequence 1 --init-required --signature-policy "OR ('SampleOrg.member')"
+peer lifecycle chaincode commit -o 127.0.0.1:7050 --channelID ch1 --name mycc --version 1.0 --sequence 1 --init-required --signature-policy "OR ('SampleOrg.member')" --peerAddresses 127.0.0.1:7051
+```
+
+```sh
+## invoke
+CORE_PEER_ADDRESS=127.0.0.1:7051 peer chaincode invoke -o 127.0.0.1:7050 -C ch1 -n mycc -c '{"Args":["init","a","100","b","200"]}' --isInit
+CORE_PEER_ADDRESS=127.0.0.1:7051 peer chaincode invoke -o 127.0.0.1:7050 -C ch1 -n mycc -c '{"Args":["invoke","a","b","10"]}'
+CORE_PEER_ADDRESS=127.0.0.1:7051 peer chaincode invoke -o 127.0.0.1:7050 -C ch1 -n mycc -c '{"Args":["query","a"]}'
+```
+
+試著部署 lab10 的 atcc
+
+```sh
+## go build
+cd fabric-samples/atcc/
+go build -o atcc
+mv atcc ../../
+cd ../../
+```
+
+```sh
+## Start the chaincode(從 peer log 確認)
+CORE_CHAINCODE_LOGLEVEL=debug CORE_PEER_TLS_ENABLED=false CORE_CHAINCODE_ID_NAME=atcc:1.0 ./simpleChaincode -peer.address 127.0.0.1:7052
+```
+
+```sh
+## Approve and commit the chaincode definition
+export PATH=$(pwd)/build/bin:$PATH
+export FABRIC_CFG_PATH=$(pwd)/sampleconfig
+
+peer lifecycle chaincode approveformyorg  -o 127.0.0.1:7050 --channelID ch1 --name atcc --version 1.0 --sequence 1 --signature-policy "OR ('SampleOrg.member')"  --package-id atcc:1.0
+
+peer lifecycle chaincode commit -o 127.0.0.1:7050 --channelID ch1 --name atcc --version 1.0 --sequence 1 --signature-policy "OR ('SampleOrg.member')" --peerAddresses 127.0.0.1:7051
+```
+
+```sh
+## invoke & query
+
+## init
+CORE_PEER_ADDRESS=127.0.0.1:7051 peer chaincode invoke -o 127.0.0.1:7050 -C ch1 -n atcc -c '{"function":"InitLedger","Args":[]}'
+
+## c
+CORE_PEER_ADDRESS=127.0.0.1:7051 peer chaincode invoke -o 127.0.0.1:7050 -C ch1 -n atcc -c '{"function":"CreateAsset","Args":["asset8","blue","16","Kelley","750"]}'
+
+## r
+CORE_PEER_ADDRESS=127.0.0.1:7051 peer chaincode query -o 127.0.0.1:7050 -C ch1 -n atcc -c '{"Args":["ReadAsset","asset8"]}'
+
+## u
+CORE_PEER_ADDRESS=127.0.0.1:7051 peer chaincode invoke -o 127.0.0.1:7050 -C ch1 -n atcc -c '{"Args":["UpdateAsset", "asset8", "blue", "5", "Mark", "350"]}'
+
+## d
+CORE_PEER_ADDRESS=127.0.0.1:7051 peer chaincode invoke -o 127.0.0.1:7050 -C ch1 -n atcc -c '{"Args":["DeleteAsset","asset8"]}'
+
+## transfer
+CORE_PEER_ADDRESS=127.0.0.1:7051 peer chaincode invoke -o 127.0.0.1:7050 -C ch1 -n atcc -c '{"function":"TransferAsset","Args":["asset6","Mark"]}'
+
+## get all
+CORE_PEER_ADDRESS=127.0.0.1:7051 peer chaincode query -o 127.0.0.1:7050 -C ch1 -n atcc -c '{"Args":["GetAllAssets"]}'
+```
+
